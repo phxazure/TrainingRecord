@@ -55,34 +55,37 @@ private func s(_ weight: Double, _ reps: Int) -> SetEntry {
     #expect(points.map(\.bestE1RM) == [116.7, 80.0, 100.0])
 }
 
-@Test func bestE1RMIsTheMaxAcrossSetsAndVolumeSumsAll() {
+@Test func bestE1RMIsTheMaxAcrossSetsAndVolumeSumsAll() throws {
     // 组序故意让最大 e1RM 不在第一组：60×10 → 80.0，100×5 → 116.7，50×3 → 55.0
     let session = WorkoutSession(id: fixedUUID("00000000-0000-0000-0000-000000000110"), date: Date(timeIntervalSince1970: 100), exercises: [
         entry("Bench", [s(60, 10), s(100, 5), s(50, 3)]),
     ])
     let points = trend(for: "Bench", in: [session])
-    #expect(points.count == 1)
+    try #require(points.count == 1)
     #expect(points[0].bestE1RM == 116.7)
     #expect(points[0].volume == 600 + 500 + 150)   // 1250
 }
 
-@Test func exerciseNameMatchesTrimmedAndCaseInsensitive() {
+@Test func exerciseNameMatchesTrimmedAndCaseInsensitive() throws {
     let session = WorkoutSession(id: fixedUUID("00000000-0000-0000-0000-000000000120"), date: Date(timeIntervalSince1970: 100), exercises: [
         entry(" bench press ", [s(100, 5)]),   // 500
         entry("Deadlift", [s(200, 2)]),        // 400，不得计入
     ])
     let points = trend(for: "Bench Press", in: [session])
-    #expect(points.count == 1)
+    try #require(points.count == 1)
     #expect(points[0].volume == 500)
+    // 查询串自身带首尾空白（含换行）：trim 后应与不带空白的查询结果一致
+    let padded = trend(for: "  Bench Press \n", in: [session])
+    #expect(padded == points)
 }
 
-@Test func sameNameWithinOneSessionMergesIntoSinglePoint() {
+@Test func sameNameWithinOneSessionMergesIntoSinglePoint() throws {
     let session = WorkoutSession(id: fixedUUID("00000000-0000-0000-0000-000000000130"), date: Date(timeIntervalSince1970: 100), exercises: [
         entry("Squat", [s(100, 5)]),   // 500，116.7
         entry("Squat", [s(50, 5)]),    // 250，58.3
     ])
     let points = trend(for: "Squat", in: [session])
-    #expect(points.count == 1)
+    try #require(points.count == 1)
     #expect(points[0].volume == 750)
     #expect(points[0].bestE1RM == 116.7)
 }
@@ -109,11 +112,11 @@ private func s(_ weight: Double, _ reps: Int) -> SetEntry {
     #expect(trend(for: "Plank", in: [without]) == [])
 }
 
-@Test func allZeroRepsProducesZeroPointAndZeroRepsNeverJoinE1RM() {
+@Test func allZeroRepsProducesZeroPointAndZeroRepsNeverJoinE1RM() throws {
     let s1 = WorkoutSession(id: fixedUUID("00000000-0000-0000-0000-000000000250"), date: Date(timeIntervalSince1970: 100), exercises: [entry("Bench", [s(200, 0), s(100, 0)])])
     let s2 = WorkoutSession(id: fixedUUID("00000000-0000-0000-0000-000000000260"), date: Date(timeIntervalSince1970: 200), exercises: [entry("Bench", [s(200, 0), s(60, 10)])])
     let points = trend(for: "Bench", in: [s2, s1])
-    #expect(points.count == 2)
+    try #require(points.count == 2)
     let p1 = points[0]   // date 100：组全 reps==0
     let p2 = points[1]   // date 200：0 次组不得计入 e1RM
     #expect(p1.bestE1RM == 0)
