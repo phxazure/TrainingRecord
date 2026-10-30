@@ -15,18 +15,34 @@ public struct SetEntry: Equatable, Sendable {
     }
 }
 
+/// 单个动作及其组。结构：训练 → 动作 → 组。
+public struct ExerciseEntry: Equatable, Sendable {
+    /// 动作名，已去掉首尾空白。
+    public let name: String
+    /// 该动作的所有组。
+    public let sets: [SetEntry]
+
+    /// name 去掉首尾空白后为空时返回 nil。
+    public init?(name: String, sets: [SetEntry]) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        self.name = trimmed
+        self.sets = sets
+    }
+}
+
 /// 一次训练场次。
 public struct WorkoutSession: Equatable, Sendable {
     /// 场次唯一标识。
     public let id: UUID
     /// 训练日期。
     public let date: Date
-    /// 场次包含的所有组。
-    public let sets: [SetEntry]
+    /// 场次包含的所有动作。
+    public let exercises: [ExerciseEntry]
 
-    public init(id: UUID = UUID(), date: Date, sets: [SetEntry]) {
+    public init(id: UUID = UUID(), date: Date, exercises: [ExerciseEntry]) {
         self.id = id
         self.date = date
-        self.sets = sets
+        self.exercises = exercises
     }
 }

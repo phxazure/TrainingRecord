@@ -7,7 +7,7 @@ private func fixedUUID(_ s: String) -> UUID {
 }
 
 private func session(id: UUID, date: Date, reps: Int) -> WorkoutSession {
-    WorkoutSession(id: id, date: date, sets: [SetEntry(weight: 100, reps: reps)!])
+    WorkoutSession(id: id, date: date, exercises: [ExerciseEntry(name: "卧推", sets: [SetEntry(weight: 100, reps: reps)!])!])
 }
 
 @Test func emptyRepository() async throws {
