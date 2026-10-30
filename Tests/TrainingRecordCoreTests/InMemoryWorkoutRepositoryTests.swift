@@ -102,6 +102,9 @@ private func session(id: UUID, date: Date, reps: Int) -> WorkoutSession {
                 try await repo.save(session(id: id, date: Date(timeIntervalSince1970: 0), reps: i))
             }
         }
+        // 必须等待全部子任务完成：否则闭包返回后 group 取消未完成的子任务并吞掉错误，
+        // 子任务抛错不会让测试失败。
+        try await group.waitForAll()
     }
     #expect(try await repo.allSessions().count == 100)
 }
