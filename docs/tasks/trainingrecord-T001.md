@@ -1,6 +1,6 @@
 # trainingrecord-T001 训练记录数据模型 + 容量计算
 
-状态: planned
+状态: approved
 分支: task/trainingrecord-T001
 执行者: code-local
 工作目录: /Users/phx/dev/TrainingRecord
@@ -63,13 +63,20 @@ public func totalVolume(of session: WorkoutSession) -> Double
 
 - `id` 用 `UUID`，默认值 `UUID()`；不要引入第三方依赖
 - `volume` / `totalVolume` 用 `public func`（自由函数），不要写成类型方法
-- 不要新增文件，不要改 `Package.swift`、`project.yml`、`App/`
+- 不要新增白名单之外的文件；允许新建上述三个白名单文件。不要改 `Package.swift`、`project.yml`、`App/`
 - 中文注释可以，但不要写中文标识符
 
 ## 审查记录
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 通过（代码审查；CI 未全绿） | @review 独立核验 PR #2 @ 479967288d5ca2926c114047262df69ef2d43727：9 tests passed、变异测试变红、App 构建退出 0、新增 Core 17/17 行及 5/5 函数覆盖。0 BLOCKER / 2 SHOULD-FIX：历史派单超过当时 ≤2 文件限制；“不要新增文件”表述矛盾。本 docs PR 澄清后者；用户已批准将 code-local 放宽至聚焦任务 ≤5 文件，但不追溯抹去历史偏差。核验时 CI test 排队，guard 成功，仍须 CI 双绿及人类合并。 | 2026-10-31 02:34 AEDT |
+
+## 派单规则与回退
+
+- 用户于 2026-10-31 授权修订 code-local 限制：单一功能、最多 5 个白名单文件、验收可测试；不引新依赖、不跨模块重构、不改架构。本任务无需重写实现。
+- `approved` 仅表示代码审查通过，不代表已满足 CI 门禁或已经合并。
+- 本次只改本文档，验收口径、生产实现和测试均不变。未合并可关闭 docs PR；合并后以 `git revert <本 docs PR 的合并提交>` 在新分支生成回退 PR，由人类决定合并。
 
 ## 升级说明
 
