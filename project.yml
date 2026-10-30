@@ -1,0 +1,26 @@
+# xcodegen spec：.xcodeproj 是生成物，不进 git，不要手改
+name: TrainingRecord
+options:
+  bundleIdPrefix: com.phx
+  deploymentTarget: { iOS: "17.0" }
+  createIntermediateGroups: true
+settings:
+  base:
+    GENERATE_INFOPLIST_FILE: YES
+    SWIFT_VERSION: "6.0"
+packages:
+  TrainingRecordCore:
+    path: .
+targets:
+  TrainingRecord:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: TrainingRecordCore
+        product: TrainingRecordCore
+schemes:
+  TrainingRecord:
+    build:
+      targets:
+        TrainingRecord: all

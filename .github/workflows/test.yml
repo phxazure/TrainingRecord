@@ -1,0 +1,52 @@
+# job 名就是 ruleset 的 required-check context（test / guard）。改名字 = 门禁失效。
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - name: Generate Xcode project
+        run: |
+          command -v xcodegen || brew install xcodegen
+          xcodegen generate
+      - name: Unit tests (SwiftPM, headless, no simulator)
+        run: swift test
+      - name: Build app for simulator
+        run: |
+          PROJ="$(ls -d *.xcodeproj | head -1)"
+          SCHEME="${PROJ%.xcodeproj}"
+          xcodebuild build -project "$PROJ" -scheme "$SCHEME" \
+            -destination 'generic/platform=iOS Simulator' -quiet
+          echo "BUILD_OK $PROJ $SCHEME"
+
+  # 便宜检查放 Linux：macOS runner 的分钟数消耗约 10 倍
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Forbidden patterns
+        run: |
+          set -e
+          echo "scanning for forbidden patterns..."
+          if git grep -nE -- '--no-verify|--force-with-lease|git push -f' -- ':!.github' ':!docs' ':!AGENTS.md'; then
+            echo "::error::forbidden git escape hatch found"
+            exit 1
+          fi
+          if git grep -nE -- 'AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|-----BEGIN (RSA |OPENSSH )?PRIVATE KEY-----' -- ':!.github' ':!docs'; then
+            echo "::error::possible hardcoded secret"
+            exit 1
+          fi
+          echo "guard ok"
