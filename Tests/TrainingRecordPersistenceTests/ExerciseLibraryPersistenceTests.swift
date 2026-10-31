@@ -339,3 +339,82 @@ private func entry(_ name: String, id: UUID? = nil, _ sets: [(Double, Int)] = [(
         #expect(trend(for: "深蹲", in: all).isEmpty)
     }
 }
+
+// MARK: - 原子更新：已删除的训练不会被后台重写复活
+
+@Suite struct SwiftDataConditionalUpdateTests {
+    @Test(arguments: [false, true])
+    func updateExistingOnlyTouchesExistingSessions(onDisk: Bool) async throws {
+        let directory = makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = onDisk
+            ? try TrainingRecordStore.onDisk(url: directory.appendingPathComponent("s.sqlite"))
+            : try TrainingRecordStore.inMemory()
+        let original = WorkoutSession(id: uuid(1), date: Date(timeIntervalSince1970: 10), exercises: [entry("A", id: uuid(5), [(60, 8), (65, 6)]), entry("Z")])
+        try await store.workouts.save(original)
+
+        // 存在: 变换后覆盖，顺序和 id 随变换结果。
+        let replacement = WorkoutSession(id: uuid(1), date: original.date, exercises: [entry("Z"), entry("A2", id: uuid(5), [(70, 5)])])
+        #expect(try await store.workouts.updateExisting(id: uuid(1)) { _ in replacement } == true)
+        #expect(try await store.workouts.session(id: uuid(1)) == replacement)
+        #expect(try await store.workouts.storedRecordCounts() == StoredRecordCounts(sessions: 1, exercises: 2, sets: 2))
+
+        // 变换返回 nil: 不写。
+        #expect(try await store.workouts.updateExisting(id: uuid(1)) { _ in nil } == false)
+        #expect(try await store.workouts.session(id: uuid(1)) == replacement)
+
+        // 不存在: 不创建。
+        #expect(try await store.workouts.updateExisting(id: uuid(99)) { _ in replacement } == false)
+        #expect(try await store.workouts.session(id: uuid(99)) == nil)
+        try await store.workouts.delete(id: uuid(1))
+        #expect(try await store.workouts.updateExisting(id: uuid(1)) { _ in replacement } == false)
+        #expect(try await store.workouts.allSessions().isEmpty)
+        #expect(try await store.workouts.storedRecordCounts() == StoredRecordCounts(sessions: 0, exercises: 0, sets: 0))
+    }
+
+    @Test func transformSeesTheStoredSessionIncludingExerciseIds() async throws {
+        let store = try TrainingRecordStore.inMemory()
+        let original = WorkoutSession(id: uuid(1), date: Date(timeIntervalSince1970: 10), exercises: [entry("A", id: uuid(5))])
+        try await store.workouts.save(original)
+        let wasWritten = try await store.workouts.updateExisting(id: uuid(1)) { current in
+            #expect(current == original)
+            return nil
+        }
+        #expect(wasWritten == false)
+    }
+
+    @Test func concurrentUserDeletesAndServiceRewritesOnSwiftDataNeverLeaveDeletedSessionsBehind() async throws {
+        let store = try TrainingRecordStore.inMemory()
+        let bench = uuid(1)
+        try await store.library.save(make("卧推", id: bench))
+        let sessions = (1...30).map {
+            WorkoutSession(id: uuid(1000 + $0), date: Date(timeIntervalSince1970: TimeInterval($0)), exercises: [entry("卧推", id: bench)])
+        }
+        for s in sessions { try await store.workouts.save(s) }
+        let service = ExerciseLibraryService(library: store.library, workouts: store.workouts)
+        let workouts = store.workouts
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { _ = try await service.update(id: bench, name: "杠铃卧推", bodyPart: "", photoFileName: nil) }
+            for s in sessions { group.addTask { try await workouts.delete(id: s.id) } }
+            try await group.waitForAll()
+        }
+        #expect(try await store.workouts.allSessions().isEmpty)
+        #expect(try await store.workouts.storedRecordCounts() == StoredRecordCounts(sessions: 0, exercises: 0, sets: 0))
+    }
+
+    @Test func serviceRenameOnSwiftDataKeepsEveryExistingSessionAndSkipsDeletedOnes() async throws {
+        let store = try TrainingRecordStore.inMemory()
+        let bench = uuid(1)
+        try await store.library.save(make("卧推", id: bench))
+        for n in 1...3 {
+            try await store.workouts.save(WorkoutSession(id: uuid(1000 + n), date: Date(timeIntervalSince1970: TimeInterval(n)), exercises: [entry("卧推", id: bench)]))
+        }
+        try await store.workouts.delete(id: uuid(1002))
+        let service = ExerciseLibraryService(library: store.library, workouts: store.workouts)
+        _ = try await service.update(id: bench, name: "杠铃卧推", bodyPart: "", photoFileName: nil)
+        let after = try await store.workouts.allSessions()
+        #expect(after.map(\.id) == [uuid(1003), uuid(1001)])
+        #expect(after.flatMap(\.exercises).map(\.name) == ["杠铃卧推", "杠铃卧推"])
+    }
+}

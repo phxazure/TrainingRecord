@@ -41,12 +41,12 @@ public struct SessionTemplate: Equatable, Sendable {
 /// 中途仓储抛错时错误原样抛出，再调用同一操作就会把剩下的做完。
 public actor ExerciseLibraryService {
     private let library: any ExerciseLibraryRepository
-    private let workouts: any WorkoutRepository
+    private let workouts: any ConditionalSessionUpdating
 
     private var isBusy = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
-    public init(library: any ExerciseLibraryRepository, workouts: any WorkoutRepository) {
+    public init(library: any ExerciseLibraryRepository, workouts: any ConditionalSessionUpdating) {
         self.library = library
         self.workouts = workouts
     }
@@ -87,15 +87,13 @@ public actor ExerciseLibraryService {
 
             let newName = updated.name
             try await rewriteSessions { session in
-                var changed = false
                 let entries = session.exercises.map { entry -> ExerciseEntry in
                     guard entry.exerciseID == id, entry.name != newName,
                           let renamed = ExerciseEntry(name: newName, sets: entry.sets, exerciseID: id)
                     else { return entry }
-                    changed = true
                     return renamed
                 }
-                return changed ? WorkoutSession(id: session.id, date: session.date, exercises: entries) : nil
+                return entries == session.exercises ? nil : WorkoutSession(id: session.id, date: session.date, exercises: entries)
             }
             try await library.save(updated)
             return updated
@@ -124,6 +122,7 @@ public actor ExerciseLibraryService {
                   let target = try await library.exercise(id: targetID)
             else { throw ExerciseLibraryError.notFound }
 
+            let targetName = target.name
             try await rewriteSessions { session in
                 guard session.exercises.contains(where: { $0.exerciseID == sourceID }) else { return nil }
                 var result: [ExerciseEntry] = []
@@ -134,11 +133,11 @@ public actor ExerciseLibraryService {
                         continue
                     }
                     if let index = mergedIndex {
-                        let combined = ExerciseEntry(name: target.name, sets: result[index].sets + entry.sets, exerciseID: targetID)
+                        let combined = ExerciseEntry(name: targetName, sets: result[index].sets + entry.sets, exerciseID: targetID)
                         result[index] = combined ?? result[index]
                     } else {
                         mergedIndex = result.count
-                        result.append(ExerciseEntry(name: target.name, sets: entry.sets, exerciseID: targetID) ?? entry)
+                        result.append(ExerciseEntry(name: targetName, sets: entry.sets, exerciseID: targetID) ?? entry)
                     }
                 }
                 return WorkoutSession(id: session.id, date: session.date, exercises: result)
@@ -178,16 +177,14 @@ public actor ExerciseLibraryService {
 
             let ids = idByKey
             try await rewriteSessions { session in
-                var changed = false
                 let entries = session.exercises.map { entry -> ExerciseEntry in
                     guard entry.exerciseID == nil,
                           let id = ids[ExerciseDefinition.nameKey(entry.name)],
                           let linked = ExerciseEntry(name: entry.name, sets: entry.sets, exerciseID: id)
                     else { return entry }
-                    changed = true
                     return linked
                 }
-                return changed ? WorkoutSession(id: session.id, date: session.date, exercises: entries) : nil
+                return entries == session.exercises ? nil : WorkoutSession(id: session.id, date: session.date, exercises: entries)
             }
             return created
         }
@@ -241,7 +238,7 @@ public actor ExerciseLibraryService {
     }
 
     /// 复制上次训练：最近一场训练的动作（按原顺序，映射为动作库当前的条目，跳过已不存在的与没有 id 的，同一动作只取一次）。
-    /// 没有任何训练时返回 nil；最近一场的动作全都映射不上时返回 `exercises` 为空的模板。
+    /// 没有任何训练、或最近一场的动作一个都映射不上时返回 nil（不会退回更早的一场）。
     public func lastSessionTemplate() async throws -> SessionTemplate? {
         guard let latest = try await workouts.allSessions().first else { return nil }
         let byID = Dictionary(uniqueKeysWithValues: try await library.allExercises().map { ($0.id, $0) })
@@ -250,19 +247,21 @@ public actor ExerciseLibraryService {
             guard let id = entry.exerciseID, let item = byID[id], seen.insert(id).inserted else { return nil }
             return item
         }
-        return SessionTemplate(date: latest.date, exercises: exercises)
+        return exercises.isEmpty ? nil : SessionTemplate(date: latest.date, exercises: exercises)
     }
 
     // MARK: - 内部
 
-    /// 对 `transform` 返回非 nil 的场次保存新版本。先用全量列表找出候选，保存前再按 id 重读一次最新版本，
-    /// 这样不会把期间被删除的场次写回去。
-    private func rewriteSessions(_ transform: (WorkoutSession) -> WorkoutSession?) async throws {
-        for candidate in try await workouts.allSessions() where transform(candidate) != nil {
-            guard let fresh = try await workouts.session(id: candidate.id),
-                  let rewritten = transform(fresh)
-            else { continue }
-            try await workouts.save(rewritten)
+    /// 对 `transform` 返回非 nil 的场次保存新版本。先用全量列表找出候选，再逐个更新。
+    ///
+    /// 候选列表读完之后、写回之前，用户可能已经删掉了某场训练（`HistoryViewModel` 直接删仓储，不经过本 service）。
+    /// 所以写回是仓储内部**原子**的「仅当场次仍存在才更新」（`ConditionalSessionUpdating`）：
+    /// 已被删除的场次什么都不写，绝不重新创建。这里不能用 `session(id:)` + `save` 两次 await 拼起来——
+    /// 两次调用之间的删除会被 `save`（upsert）复活。
+    private func rewriteSessions(_ transform: @escaping @Sendable (WorkoutSession) -> WorkoutSession?) async throws {
+        let candidates = try await workouts.allSessions().filter { transform($0) != nil }.map(\.id)
+        for id in candidates {
+            _ = try await workouts.updateExisting(id: id, transform)
         }
     }
 

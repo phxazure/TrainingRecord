@@ -33,7 +33,7 @@ struct TrainingRecordApp: App {
 
 /// 启动时选定的仓储，以及（仅当退回内存仓储时）要给用户看的提示。
 struct LaunchStorage {
-    let repository: any WorkoutRepository
+    let repository: any ConditionalSessionUpdating
     let library: any ExerciseLibraryRepository
     let warning: String?
 
@@ -81,7 +81,7 @@ struct LaunchStorage {
     /// 打开失败时不崩溃：退回内存仓储，并带上提示文案。
     static func open(
         at url: URL,
-        openOnDisk: (URL) throws -> (any WorkoutRepository, any ExerciseLibraryRepository)
+        openOnDisk: (URL) throws -> (any ConditionalSessionUpdating, any ExerciseLibraryRepository)
     ) -> LaunchStorage {
         do {
             #if DEBUG

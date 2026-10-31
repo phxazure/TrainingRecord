@@ -65,11 +65,11 @@ public final class RecordViewModel {
         linkedExerciseIDs[draftID]
     }
 
-    /// 复制上次训练：只在草稿为空时生效（返回 true），按模板顺序带入动作名和 id，不带入组；
-    /// 草稿非空时返回 false 且不改动。
+    /// 复制上次训练：只在草稿为空且模板至少有一个动作时生效（返回 true），按模板顺序带入动作名和 id，不带入组；
+    /// 草稿非空、或模板为空时返回 false 且不改动。
     @discardableResult
     public func apply(_ template: SessionTemplate) -> Bool {
-        guard exercises.isEmpty else { return false }
+        guard exercises.isEmpty, !template.exercises.isEmpty else { return false }
         for definition in template.exercises {
             addExercise(definition)
         }

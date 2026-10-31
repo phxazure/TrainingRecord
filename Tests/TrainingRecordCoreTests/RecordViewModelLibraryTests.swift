@@ -89,6 +89,18 @@ private func definition(_ name: String, id: UUID = UUID()) -> ExerciseDefinition
         #expect(model.exercises == before)
     }
 
+    @Test func applyEmptyTemplateReturnsFalseAndChangesNothing() {
+        let (model, _) = makeModel()
+        let empty = SessionTemplate(date: Date(timeIntervalSince1970: 0), exercises: [])
+        #expect(model.apply(empty) == false)
+        #expect(model.exercises.isEmpty)
+
+        #expect(model.addExercise(name: "自由输入"))
+        let before = model.exercises
+        #expect(model.apply(empty) == false)
+        #expect(model.exercises == before)
+    }
+
     @Test func applyTemplateTwiceSecondTimeIsRejected() {
         let (model, _) = makeModel()
         let template = SessionTemplate(date: Date(timeIntervalSince1970: 0), exercises: [definition("深蹲")])

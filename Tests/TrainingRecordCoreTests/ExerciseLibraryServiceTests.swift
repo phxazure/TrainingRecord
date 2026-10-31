@@ -25,7 +25,7 @@ private func definition(_ n: Int, _ name: String, _ part: String = "") -> Exerci
 }
 
 /// 前几次保存按序号失败的训练仓储，用来验证「中途出错、再调一次能补完」。
-private actor FlakyWorkoutRepository: WorkoutRepository {
+private actor FlakyWorkoutRepository: ConditionalSessionUpdating {
     struct Boom: Error, Equatable {}
 
     private let base: InMemoryWorkoutRepository
@@ -41,6 +41,13 @@ private actor FlakyWorkoutRepository: WorkoutRepository {
         calls += 1
         if failingCalls.contains(calls) { throw Boom() }
         try await base.save(session)
+    }
+
+    /// 与 save 共用计数：第 N 次「写」（save 或 updateExisting）按序号失败。
+    func updateExisting(id: UUID, _ transform: @Sendable (WorkoutSession) -> WorkoutSession?) async throws -> Bool {
+        calls += 1
+        if failingCalls.contains(calls) { throw Boom() }
+        return try await base.updateExisting(id: id, transform)
     }
 
     func session(id: UUID) async throws -> WorkoutSession? { try await base.session(id: id) }
@@ -391,6 +398,21 @@ private struct Fixture {
         #expect(try await workouts.allSessions().flatMap(\.exercises).flatMap(\.sets).map(\.reps).sorted() == [1, 2, 3, 4])
     }
 
+    @Test func renameOnlyWritesSessionsThatActuallyChange() async throws {
+        let bench = uuid(1)
+        let sessions = [
+            session(1, day: 1, [entry("卧推", id: bench)]),
+            session(2, day: 2, [entry("深蹲", id: uuid(2))]),
+            session(3, day: 3, [entry("卧推")]),  // 没有 id，不属于这个动作
+        ]
+        let workouts = FlakyWorkoutRepository(sessions: sessions, failingSaveCalls: [])
+        let library = InMemoryExerciseLibraryRepository()
+        try await library.save(definition(1, "卧推"))
+        let service = ExerciseLibraryService(library: library, workouts: workouts)
+        _ = try await service.update(id: bench, name: "杠铃卧推", bodyPart: "", photoFileName: nil)
+        #expect(await workouts.saveCalls() == 1)
+    }
+
     @Test func renameLibrarySaveFailingThrowsAndRetryCompletes() async throws {
         let bench = uuid(1)
         let sessions = [session(1, day: 1, [entry("卧推", id: bench)])]
@@ -692,6 +714,15 @@ private struct Fixture {
         #expect(template.date == day(4))
         #expect(template.exercises.map(\.name) == ["深蹲", "卧推"])
         #expect(template.exercises.map(\.id) == [squat, bench])
+    }
+
+    @Test func lastSessionTemplateIsNilWhenNoExerciseOfTheLatestSessionMapsToTheLibrary() async throws {
+        let sessions = [
+            session(1, day: 1, [entry("卧推", id: bench)]),  // 更早的一场能映射，但只看最近一场
+            session(2, day: 2, [entry("已删除", id: uuid(99)), entry("无 id")]),
+        ]
+        let fixture = try await Fixture(library: library, sessions: sessions)
+        #expect(try await fixture.service.lastSessionTemplate() == nil)
     }
 
     @Test func lastSessionTemplateUsesCurrentLibraryNames() async throws {
