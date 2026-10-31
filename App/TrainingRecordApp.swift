@@ -37,13 +37,27 @@ struct LaunchStorage {
 
     static func open() -> LaunchStorage {
         #if DEBUG
-        // 截图用的样例数据启动参数会往仓储写入样例：只能写进内存仓储，绝不污染真实的本地存储。
-        if ProcessInfo.processInfo.arguments.contains(HistoryDebugLaunch.seedArgument) {
+        // 截图用的样例数据启动参数会注入样例（预填草稿的，点保存就会写进仓储）：
+        // 只能用内存仓储，绝不污染真实的本地存储。必须在创建持久容器之前决定。
+        if usesInMemoryStorage(arguments: ProcessInfo.processInfo.arguments) {
             return LaunchStorage(repository: InMemoryWorkoutRepository(), warning: nil)
         }
         #endif
         return open(at: defaultStoreURL, openOnDisk: SwiftDataWorkoutRepository.onDisk(url:))
     }
+
+    #if DEBUG
+    /// 会注入样例数据的 DEBUG 启动参数。新增任何会预填数据 / 草稿的参数，都要加到这里。
+    static let sampleDataArguments: Set<String> = [
+        HistoryDebugLaunch.seedArgument,  // -seedHistorySample：直接写仓储
+        RecordSampleData.launchArgument,  // -seedRecordSample：预填草稿，保存即写仓储
+        "-recordScrollToBottom",  // 预填两个动作的草稿（见 RecordScrollDebug）
+    ]
+
+    static func usesInMemoryStorage(arguments: [String]) -> Bool {
+        !sampleDataArguments.isDisjoint(with: arguments)
+    }
+    #endif
 
     /// 打开失败时不崩溃：退回内存仓储，并带上提示文案。
     static func open(at url: URL, openOnDisk: (URL) throws -> any WorkoutRepository) -> LaunchStorage {
