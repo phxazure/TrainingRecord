@@ -19,6 +19,10 @@ public final class RecordViewModel {
     /// 正在等待仓储写入。
     public private(set) var isSaving = false
 
+    /// 草稿动作 → 动作库条目 id。只记录从动作库添加的动作；自由输入的动作没有。
+    /// 用 `exerciseID(of:)` 读取。
+    private var linkedExerciseIDs: [ExerciseDraft.ID: UUID] = [:]
+
     @ObservationIgnored private let repository: any WorkoutRepository
     @ObservationIgnored private let now: @Sendable () -> Date
 
@@ -41,9 +45,41 @@ public final class RecordViewModel {
         return true
     }
 
+    /// 从动作库添加动作：草稿记录它的 `exerciseID`，保存后的场次条目带上这个 id。
+    /// 与已有草稿动作同 id、或同名（去首尾空白、不区分大小写）时返回 false 且不新增。
+    @discardableResult
+    public func addExercise(_ definition: ExerciseDefinition) -> Bool {
+        let key = definition.name.lowercased()
+        let taken = exercises.contains { draft in
+            linkedExerciseIDs[draft.id] == definition.id || draft.name.lowercased() == key
+        }
+        guard !taken else { return false }
+        let draft = ExerciseDraft(name: definition.name)
+        exercises.append(draft)
+        linkedExerciseIDs[draft.id] = definition.id
+        return true
+    }
+
+    /// 草稿动作对应的动作库条目 id；自由输入的动作、或 id 不存在时为 nil。
+    public func exerciseID(of draftID: ExerciseDraft.ID) -> UUID? {
+        linkedExerciseIDs[draftID]
+    }
+
+    /// 复制上次训练：只在草稿为空时生效（返回 true），按模板顺序带入动作名和 id，不带入组；
+    /// 草稿非空时返回 false 且不改动。
+    @discardableResult
+    public func apply(_ template: SessionTemplate) -> Bool {
+        guard exercises.isEmpty else { return false }
+        for definition in template.exercises {
+            addExercise(definition)
+        }
+        return true
+    }
+
     /// 删除指定动作（连同它的组）；id 不存在时什么也不做。
     public func removeExercise(id: ExerciseDraft.ID) {
         exercises.removeAll { $0.id == id }
+        linkedExerciseIDs[id] = nil
     }
 
     // MARK: - 组
@@ -94,7 +130,7 @@ public final class RecordViewModel {
         let entries = snapshot.compactMap { draft -> ExerciseEntry? in
             guard !draft.sets.isEmpty else { return nil }
             let sets = draft.sets.compactMap { SetEntry(weight: $0.weight, reps: $0.reps) }
-            return ExerciseEntry(name: draft.name, sets: sets)
+            return ExerciseEntry(name: draft.name, sets: sets, exerciseID: linkedExerciseIDs[draft.id])
         }
         let session = WorkoutSession(date: snapshotDate, exercises: entries)
 
@@ -119,5 +155,7 @@ public final class RecordViewModel {
             remaining.sets.removeAll { savedSetIDs.contains($0.id) }
             return remaining.sets.isEmpty ? nil : remaining
         }
+        let remainingIDs = Set(exercises.map(\.id))
+        linkedExerciseIDs = linkedExerciseIDs.filter { remainingIDs.contains($0.key) }
     }
 }

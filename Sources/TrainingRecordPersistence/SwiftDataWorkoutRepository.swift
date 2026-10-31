@@ -36,8 +36,7 @@ public actor SwiftDataWorkoutRepository: WorkoutRepository {
     }
 
     private static func makeContainer(_ configuration: ModelConfiguration) throws -> ModelContainer {
-        let schema = Schema([SessionRecord.self, ExerciseRecord.self, SetRecord.self])
-        return try ModelContainer(for: schema, configurations: [configuration])
+        try StoreSchema.makeContainer(configuration)
     }
 
     // MARK: WorkoutRepository
@@ -102,7 +101,7 @@ public actor SwiftDataWorkoutRepository: WorkoutRepository {
     private static func makeRecord(from session: WorkoutSession) -> SessionRecord {
         let record = SessionRecord(id: session.id, date: session.date)
         for (exerciseIndex, exercise) in session.exercises.enumerated() {
-            let exerciseRecord = ExerciseRecord(order: exerciseIndex, name: exercise.name)
+            let exerciseRecord = ExerciseRecord(order: exerciseIndex, name: exercise.name, exerciseID: exercise.exerciseID)
             for (setIndex, set) in exercise.sets.enumerated() {
                 exerciseRecord.sets.append(SetRecord(order: setIndex, weight: set.weight, reps: set.reps))
             }
@@ -123,7 +122,7 @@ public actor SwiftDataWorkoutRepository: WorkoutRepository {
                         }
                         return set
                     }
-                guard let exercise = ExerciseEntry(name: exerciseRecord.name, sets: sets) else {
+                guard let exercise = ExerciseEntry(name: exerciseRecord.name, sets: sets, exerciseID: exerciseRecord.exerciseID) else {
                     throw SwiftDataWorkoutRepositoryError.corruptRecord
                 }
                 return exercise

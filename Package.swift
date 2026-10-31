@@ -15,7 +15,9 @@ let package = Package(
         .target(name: "TrainingRecordPersistence", dependencies: ["TrainingRecordCore"]),
         .testTarget(
             name: "TrainingRecordPersistenceTests",
-            dependencies: ["TrainingRecordPersistence", "TrainingRecordCore"]
+            dependencies: ["TrainingRecordPersistence", "TrainingRecordCore"],
+            // 旧版（T006 代码生成的）磁盘存储样本，用于验证迁移；生成方法见 Fixtures/README.md。
+            resources: [.copy("Fixtures")]
         )
     ]
 )
