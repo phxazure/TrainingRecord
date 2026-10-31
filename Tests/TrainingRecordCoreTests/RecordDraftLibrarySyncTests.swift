@@ -138,16 +138,105 @@ private func setPairs(_ draft: ExerciseDraft) -> [String] {
         #expect(try await repository.allSessions().first == saved)
     }
 
-    @Test func weightTextRoundTripIsExact() {
+    // R2：同步是就地更新——组的数值、顺序、id，动作的草稿 id 都原样保留，不经任何格式化重建。
+    @Test func boundaryWeightsSurviveSyncBitForBit() {
         let (model, _) = makeModel()
         let bench = definition("卧推")
         model.addExercise(bench)
-        let weights = ["0", "62.5", "0.0000001", "1000", "99.99", "0.1", "33.333333"]
-        addSets(model, to: 0, weights.map { ($0, "1") })
-        let before = model.exercises[0].sets.map(\.weight)
+        let texts = ["0.0000000000004", "62.12345678901234", "999.9999999999999", "0", "1000", "0.1", "33.333333"]
+        addSets(model, to: 0, texts.map { ($0, "7") })
+        let before = model.exercises[0].sets
+        #expect(before.map(\.weight).prefix(3) == [4e-13, 62.12345678901234, 999.9999999999999])
+
         #expect(model.syncExercises(with: [definition("新名字", id: bench.id)]))
-        #expect(model.exercises[0].sets.map(\.weight) == before)
-        #expect(model.exercises[0].sets.map(\.reps) == Array(repeating: 1, count: weights.count))
+
+        #expect(model.exercises[0].sets == before)   // 逐值相等，含 id
+        #expect(model.exercises[0].sets.map(\.weight).map(\.bitPattern) == before.map(\.weight).map(\.bitPattern))
+    }
+
+    @Test func renameKeepsDraftIdsAndSetIds() {
+        let (model, _) = makeModel()
+        let bench = definition("卧推"), squat = definition("深蹲")
+        model.addExercise(bench); model.addExercise(squat)
+        addSets(model, to: 0, [("60", "10"), ("62.5", "8")])
+        addSets(model, to: 1, [("100", "5")])
+        let draftIDs = model.exercises.map(\.id)
+        let setIDs = model.exercises.map { $0.sets.map(\.id) }
+
+        #expect(model.syncExercises(with: [definition("平板卧推", id: bench.id), squat]))
+
+        #expect(model.exercises.map(\.id) == draftIDs)
+        #expect(model.exercises.map { $0.sets.map(\.id) } == setIDs)
+        #expect(model.exercises.map(\.name) == ["平板卧推", "深蹲"])
+    }
+
+    @Test func mergeKeepsSurvivorDraftIdAndAllSetIdsInOrder() {
+        let (model, _) = makeModel()
+        let source = definition("卧推"), target = definition("杠铃卧推")
+        model.addExercise(source); model.addExercise(target)
+        addSets(model, to: 0, [("60", "10")])
+        addSets(model, to: 1, [("70", "8")])
+        let survivor = model.exercises[0].id
+        let allSetIDs = model.exercises.flatMap { $0.sets.map(\.id) }
+
+        #expect(model.syncExercises(with: [target], merged: [source.id: target.id]))
+
+        #expect(model.exercises.map(\.id) == [survivor])
+        #expect(model.exercises[0].sets.map(\.id) == allSetIDs)
+        #expect(model.exerciseID(of: survivor) == target.id)
+        #expect(model.exercises[0].name == "杠铃卧推")
+    }
+
+    @Test func unlinkedDeletedKeepsDraftAndSetIds() {
+        let (model, _) = makeModel()
+        let gone = definition("消失")
+        model.addExercise(gone)
+        addSets(model, to: 0, [("20", "12")])
+        let draftID = model.exercises[0].id
+        let setIDs = model.exercises[0].sets.map(\.id)
+        #expect(model.syncExercises(with: []))
+        #expect(model.exercises.map(\.id) == [draftID])
+        #expect(model.exercises[0].sets.map(\.id) == setIDs)
+        #expect(model.exerciseID(of: draftID) == nil)
+    }
+
+    @Test func renamedToSameNameAsFreeExerciseCombinesWithoutLosingSets() {
+        let (model, _) = makeModel()
+        let bench = definition("卧推")
+        model.addExercise(bench)
+        model.addExercise(name: "平板卧推")
+        addSets(model, to: 0, [("60", "10")])
+        addSets(model, to: 1, [("70", "8")])
+        #expect(model.syncExercises(with: [definition("平板卧推", id: bench.id)]))
+        #expect(model.exercises.count == 1)
+        #expect(setPairs(model.exercises[0]) == ["60.0x10", "70.0x8"])
+        #expect(model.exerciseID(of: model.exercises[0].id) == bench.id)
+    }
+
+    @Test func mergedSetsKeepTheirOrderAcrossMultipleSets() {
+        let (model, _) = makeModel()
+        let source = definition("卧推"), target = definition("杠铃卧推")
+        model.addExercise(source); model.addExercise(target)
+        addSets(model, to: 0, [("60", "10"), ("61", "9"), ("62", "8")])
+        addSets(model, to: 1, [("70", "7"), ("71", "6")])
+        #expect(model.syncExercises(with: [target], merged: [source.id: target.id]))
+        #expect(setPairs(model.exercises[0]) == ["60.0x10", "61.0x9", "62.0x8", "70.0x7", "71.0x6"])
+    }
+
+    @Test func freeExerciseFirstThenRenamedLinkedOneWithSameNameAdoptsTheLink() {
+        let (model, _) = makeModel()
+        let bench = definition("卧推")
+        model.addExercise(name: "平板卧推")      // 自由输入在前
+        model.addExercise(bench)                // 关联的在后
+        addSets(model, to: 0, [("70", "8")])
+        addSets(model, to: 1, [("60", "10")])
+        let firstID = model.exercises[0].id
+
+        #expect(model.syncExercises(with: [definition("平板卧推", id: bench.id)]))
+
+        #expect(model.exercises.map(\.id) == [firstID])
+        #expect(model.exerciseID(of: firstID) == bench.id)
+        #expect(setPairs(model.exercises[0]) == ["70.0x8", "60.0x10"])
     }
 
     @Test func skippedWhileSaving() async throws {

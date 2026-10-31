@@ -26,8 +26,8 @@ public struct SetDraft: Identifiable, Equatable, Sendable {
 /// 录入中的一个动作及其已添加的组（按录入顺序）。
 public struct ExerciseDraft: Identifiable, Equatable, Sendable {
     public let id: UUID
-    /// 动作名，已去掉首尾空白，非空。
-    public let name: String
+    /// 动作名，已去掉首尾空白，非空。动作库改名后由 `RecordViewModel.syncExercises` 就地更新（草稿 id 与组都不变）。
+    public internal(set) var name: String
     /// 已添加的组，按录入顺序。
     public internal(set) var sets: [SetDraft]
 

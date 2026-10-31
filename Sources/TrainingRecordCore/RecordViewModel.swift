@@ -76,6 +76,26 @@ public final class RecordViewModel {
         return true
     }
 
+    // MARK: - 动作库变更同步用（模块内部；见 `syncExercises`）
+
+    /// 就地更新草稿动作的名字和动作库 id：草稿动作 id、已录入的组原样不动。`exerciseID == nil` 表示断开关联。
+    func updateExercise(_ id: ExerciseDraft.ID, name: String, exerciseID: UUID?) {
+        guard let index = exercises.firstIndex(where: { $0.id == id }) else { return }
+        exercises[index].name = name
+        linkedExerciseIDs[id] = exerciseID
+    }
+
+    /// 把 `source` 的组（原样，含组 id 和顺序）接到 `target` 末尾，再移除 `source`。
+    func moveSets(from source: ExerciseDraft.ID, into target: ExerciseDraft.ID) {
+        guard source != target,
+              let from = exercises.firstIndex(where: { $0.id == source }),
+              let to = exercises.firstIndex(where: { $0.id == target })
+        else { return }
+        exercises[to].sets += exercises[from].sets
+        exercises.remove(at: from)
+        linkedExerciseIDs[source] = nil
+    }
+
     /// 删除指定动作（连同它的组）；id 不存在时什么也不做。
     public func removeExercise(id: ExerciseDraft.ID) {
         exercises.removeAll { $0.id == id }

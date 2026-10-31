@@ -20,7 +20,8 @@ final class LibraryStore {
 
     /// 动作库全部动作（按部位、名字排序）。这是**展示缓存**，不能当作写入的依据（写入前一律读仓储里的最新值）。
     private(set) var exercises: [ExerciseDefinition] = []
-    /// 最近一次加载动作库是否成功过（失败时不要拿空的 `exercises` 去同步训练草稿）。
+    /// **最近一次**加载动作库是否成功。只有它为 true 时，`exercises` 才代表仓储里现在的内容：
+    /// 加载失败后 `exercises` 是旧缓存，据此推断「某个动作已被删除」会把仍然有效的草稿关联误断开，所以不能用来同步训练草稿。
     private(set) var isLoaded = false
     /// 启动时的回填（数据迁移）失败。
     private(set) var backfillFailed = false
@@ -32,6 +33,7 @@ final class LibraryStore {
     private(set) var pendingPhotoCleanup: Set<String> = []
 
     @ObservationIgnored private let logger = Logger(subsystem: "com.phx.TrainingRecord", category: "ExerciseLibrary")
+    @ObservationIgnored private var journal: PhotoRecoveryJournal
     @ObservationIgnored private var reloadToken = 0
     @ObservationIgnored private var isBusy = false
     @ObservationIgnored private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -40,6 +42,7 @@ final class LibraryStore {
         self.service = service
         self.repository = repository
         self.photos = photos
+        self.journal = PhotoRecoveryJournal(url: photos.journalURL)
     }
 
     // MARK: 刷新
@@ -55,6 +58,7 @@ final class LibraryStore {
             exercises = loaded
             isLoaded = true
         } catch {
+            if token == reloadToken { isLoaded = false }  // 最新的一次读取失败：缓存不可信
             logger.error("加载动作库失败：\(String(describing: error))")
         }
     }
@@ -89,6 +93,7 @@ final class LibraryStore {
     func runBackfill() async {
         do {
             try await serialized {
+                await recoverPending()
                 do {
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("-simulateBackfillFailure") {
@@ -130,13 +135,43 @@ final class LibraryStore {
         }
     }
 
+    // MARK: 恢复日志
+
+    /// 处理上次（或本次早些时候）没做完的善后。每个会改动作库 / 照片的操作开头、以及启动时都会先调用；只在串行队列里。
+    /// 日志里的动作都是幂等的：做完就从日志里划掉，做不完留着下次再试。
+    private func recoverPending() async {
+        for entry in journal.entries {
+            do {
+                switch entry {
+                case .swap(let fileName, let committed):
+                    if committed {
+                        try photos.removeBackup(fileName: fileName)  // 条目更新已成功：备份是垃圾
+                    } else {
+                        try photos.restoreBackup(fileName: fileName)  // 条目更新没成功：备份是唯一的旧图，还原
+                    }
+                case .createdEntry(let id):
+                    do {
+                        try await service.delete(id: id)  // 新建失败后没删成的半成品条目
+                    } catch ExerciseLibraryError.notFound {
+                    } catch ExerciseLibraryError.inUse {
+                    }
+                }
+                try journal.remove(entry)
+            } catch {
+                logger.error("恢复未完成的善后失败，稍后重试：\(String(describing: error))")
+            }
+        }
+    }
+
     // MARK: 增删改
 
     /// 新建动作。带照片时：先把照片处理成临时文件（失败则什么都没创建），再创建条目、放置照片、写回文件名；
     /// 中途任何一步失败都回滚本次创建，不留下半成品条目（否则重试会被自己留下的同名条目挡住）。
+    /// 回滚本身失败时（例如仓储暂时不可用）记入恢复日志，下一次操作 / 启动先把它补完。
     @discardableResult
     func add(name: String, bodyPart: String, photoData: Data?) async throws -> ExerciseDefinition {
         try await serialized {
+            await recoverPending()
             let staged = try photoData.map { try photos.stage(imageData: $0) }
             let created: ExerciseDefinition
             do {
@@ -149,26 +184,31 @@ final class LibraryStore {
                 await reload()
                 return created
             }
+            let marker = PhotoRecoveryJournal.Entry.createdEntry(id: created.id)
             do {
+                try journal.upsert(marker)  // 先记下「这个条目要是没挂上照片就得删掉」
                 let installed = try photos.install(staged, exerciseID: created.id)
                 do {
                     let updated = try await service.update(
                         id: created.id, name: created.name, bodyPart: created.bodyPart, photoFileName: installed.fileName
                     )
-                    photos.finalize(installed)
+                    try? photos.finalize(installed)
+                    try? journal.remove(marker)
                     photoRevision += 1
                     await reload()
                     return updated
                 } catch {
-                    photos.rollback(installed)
+                    try? photos.rollback(installed)
                     throw error
                 }
             } catch {
                 photos.discard(staged)
                 do {
                     try await service.delete(id: created.id)  // 回滚本次创建
+                    try? journal.remove(marker)
                 } catch {
-                    logger.error("新建失败后回滚条目也失败：\(String(describing: error))")
+                    // 日志里留着 marker：下一次操作 / 启动会接着删。
+                    logger.error("新建失败后回滚条目也失败，已记入恢复日志：\(String(describing: error))")
                 }
                 await reload()
                 throw error
@@ -177,9 +217,11 @@ final class LibraryStore {
     }
 
     /// 修改动作。照片的变化是「先提交文件、再更新条目、失败则还原」：失败时旧照片保持原样，也不留孤立文件。
+    /// 还原 / 删备份自己失败时记入恢复日志（区分「该还原」与「该删除」），下一次操作 / 启动接着做。
     @discardableResult
     func update(id: UUID, name: String, bodyPart: String, photo: PhotoChange) async throws -> ExerciseDefinition {
         try await serialized {
+            await recoverPending()
             // 读仓储里的最新值，不用展示缓存（缓存可能落后）。
             guard let current = try await repository.exercise(id: id) else { throw ExerciseLibraryError.notFound }
             let updated: ExerciseDefinition
@@ -192,20 +234,49 @@ final class LibraryStore {
                 photoRevision += 1
             case .replace(let data):
                 let staged = try photos.stage(imageData: data)
+                let finalName = photos.fileName(for: id)
+                let hasOld = photos.hasPhoto(exerciseID: id)
+                let swapping = PhotoRecoveryJournal.Entry.swap(fileName: finalName, committed: false)
+                if hasOld {
+                    do { try journal.upsert(swapping) } catch {  // 记不下来就不动照片
+                        photos.discard(staged)
+                        throw error
+                    }
+                }
                 let installed: ExercisePhotoStore.InstalledPhoto
                 do {
                     installed = try photos.install(staged, exerciseID: id)
                 } catch {
                     photos.discard(staged)
+                    if hasOld { try? journal.remove(swapping) }
                     throw error
                 }
                 do {
                     updated = try await service.update(id: id, name: name, bodyPart: bodyPart, photoFileName: installed.fileName)
                 } catch {
-                    photos.rollback(installed)
+                    do {
+                        try photos.rollback(installed)
+                        if hasOld { try? journal.remove(swapping) }
+                    } catch {
+                        // 还原没成功：日志里仍是 committed == false，下次会把备份还原回去（不是删掉）。
+                        logger.error("换图失败后还原旧图也失败，已记入恢复日志：\(String(describing: error))")
+                    }
                     throw error
                 }
-                photos.finalize(installed)
+                if hasOld {
+                    // 条目已更新成功：先记「已提交」（之后备份是垃圾），再删备份。
+                    let committed = PhotoRecoveryJournal.Entry.swap(fileName: finalName, committed: true)
+                    do { try journal.upsert(committed, replacing: swapping) } catch {
+                        logger.error("记录换图已提交失败：\(String(describing: error))")
+                    }
+                    do {
+                        try photos.finalize(installed)
+                        try? journal.remove(committed)
+                        try? journal.remove(swapping)
+                    } catch {
+                        logger.error("删除旧图备份失败，稍后重试：\(String(describing: error))")
+                    }
+                }
                 photoRevision += 1
             }
             await reload()
@@ -217,6 +288,7 @@ final class LibraryStore {
     /// 删除动作；仍有训练记录时抛 `.inUse`。成功后删除它的照片文件。
     func delete(id: UUID) async throws {
         try await serialized {
+            await recoverPending()
             let fileName = try await repository.exercise(id: id)?.photoFileName
             try await service.delete(id: id)
             removePhotoFile(fileName)
@@ -229,6 +301,7 @@ final class LibraryStore {
     /// 可能只完成一部分（历史已改、source 条目还在）：重试可以补完。
     func merge(sourceID: UUID, into targetID: UUID) async throws {
         try await serialized {
+            await recoverPending()
             let fileName = try await repository.exercise(id: sourceID)?.photoFileName
             try await service.merge(sourceID: sourceID, into: targetID)
             mergedInto[sourceID] = targetID
