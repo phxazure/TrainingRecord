@@ -72,7 +72,7 @@ struct MergePickerView: View {
         .alert("合并失败", isPresented: $failed) {
             Button("好", role: .cancel) {}
         } message: {
-            Text("两个动作都没有改动，请稍后再试。")
+            Text("合并没有完成，可能已经完成了一部分。请再合并一次，会接着做完，不会重复。")
         }
         #if DEBUG
         .task { pending = await DebugLaunch.mergeConfirmTarget(from: others) }

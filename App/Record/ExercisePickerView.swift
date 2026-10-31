@@ -19,6 +19,16 @@ struct ExercisePickerView: View {
 
     var body: some View {
         List {
+            // 搜索框：自己画的输入框（系统的 .searchable 搜索框没法挂 accessibilityIdentifier）。
+            Section {
+                HStack(spacing: Space.s2) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.label2)
+                        .accessibilityHidden(true)
+                    InputField(placeholder: "搜索动作", text: $query, identifier: PickerAccessibilityID.searchField)
+                }
+            }
+
             Section {
                 NavigationLink(value: ExerciseEditRoute(addToRecord: true, prefillName: trimmedQuery)) {
                     Label(trimmedQuery.isEmpty ? "新建动作" : "新建动作「\(trimmedQuery)」", systemImage: "plus.circle.fill")
@@ -59,7 +69,7 @@ struct ExercisePickerView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索动作")
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("选择动作")
         .navigationBarTitleDisplayMode(.inline)
         .accessibilityIdentifier(PickerAccessibilityID.root)

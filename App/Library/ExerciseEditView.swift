@@ -24,6 +24,7 @@ struct ExerciseEditView: View {
     @State private var showDeleteConfirm = false
     @State private var showDeleteRejected = false
     @State private var showDeleteFailed = false
+    @State private var showDeleteInDraft = false
 
     private var editingID: UUID? { route.id }
     private var existing: ExerciseDefinition? { editingID.flatMap { app.library.definition(id: $0) } }
@@ -108,6 +109,11 @@ struct ExerciseEditView: View {
             Button("好", role: .cancel) {}
         } message: {
             Text("「\(existing?.name ?? "")」有 \(sessionCountOfExercise) 次训练记录，不能直接删除。如果它和另一个动作是同一个，可以用「合并记录」。")
+        }
+        .alert("无法删除", isPresented: $showDeleteInDraft) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text("「\(existing?.name ?? "")」在当前训练里。请先在「训练」里把它移除，再删除。")
         }
         .alert("删除失败", isPresented: $showDeleteFailed) {
             Button("好", role: .cancel) {}
@@ -295,7 +301,10 @@ struct ExerciseEditView: View {
 
     /// 没有记录时先确认再删除；有记录时直接给出拒绝提示。
     private func requestDelete() {
-        if sessionCountOfExercise == 0 {
+        // 当前训练草稿里有它：删了会让已录入的组没有归属，先拦下。
+        if let editingID, app.record.exercises.contains(where: { app.record.exerciseID(of: $0.id) == editingID }) {
+            showDeleteInDraft = true
+        } else if sessionCountOfExercise == 0 {
             showDeleteConfirm = true
         } else {
             showDeleteRejected = true

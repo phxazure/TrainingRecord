@@ -110,6 +110,9 @@ struct RecordView: View {
     private func save() {
         Task {
             do {
+                // 保存前再对一次库：草稿里的动作如果刚被改名 / 合并 / 删除，先跟上，不写旧名字或悬空 id。
+                await app.library.reload()
+                app.syncDraft()
                 let session = try await model.save()
                 successCount += 1
                 let setCount = session.exercises.reduce(0) { $0 + $1.sets.count }

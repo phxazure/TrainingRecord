@@ -62,16 +62,8 @@ enum DebugLaunch {
             ("卧推", "胸"), ("杠铃卧推", "胸"), ("深蹲", "腿"), ("硬拉", "背"), ("推举", "肩"), ("引体向上", "背"), ("平板支撑", "核心"),
         ]
         for (name, part) in parts {
-            var photo: String?
-            if name == "卧推", let data = samplePhotoData() {
-                let created = try? await app.library.service.add(name: name, bodyPart: part, photoFileName: nil)
-                if let created, let file = try? app.library.photos.save(imageData: data, exerciseID: created.id) {
-                    photo = file
-                    _ = try? await app.library.service.update(id: created.id, name: name, bodyPart: part, photoFileName: photo)
-                }
-                continue
-            }
-            _ = try? await app.library.service.add(name: name, bodyPart: part, photoFileName: nil)
+            // 卧推带示例照片（走和界面相同的新建路径，包含缩放与落盘）。
+            _ = try? await app.library.add(name: name, bodyPart: part, photoData: name == "卧推" ? samplePhotoData() : nil)
         }
         if !arguments.contains(HistoryDebugLaunch.seedArgument) {
             await HistoryDebugLaunch.seedSessions(app.repository)

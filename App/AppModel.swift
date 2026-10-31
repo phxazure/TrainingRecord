@@ -65,7 +65,15 @@ final class AppModel {
     func refresh() async {
         await history.reload()
         await library.reload()
+        syncDraft()
         dataRevision += 1
+    }
+
+    /// 让现有的训练草稿跟随动作库的改名 / 合并 / 删除（见 `RecordViewModel.syncExercises`）。
+    /// 动作库没有成功加载过时不同步：空的缓存会把草稿里所有动作误判为已删除。
+    func syncDraft() {
+        guard library.isLoaded else { return }
+        record.syncExercises(with: library.exercises, merged: library.mergedInto)
     }
 
     /// 当前标签回到根页面（删除 / 合并动作后，被删动作的详情页不能再留在栈里）。
