@@ -1,6 +1,6 @@
 # trainingrecord-T003 动作维度 + 单动作趋势统计
 
-状态: planned
+状态: approved
 分支: task/trainingrecord-T003（基于 task/trainingrecord-T002 补修后的提交 ddd1f0c，堆叠开发）
 执行者: code-local
 工作目录: /Users/phx/dev/TrainingRecord-T003（独立 clone，不要动 TrainingRecord / TrainingRecord-T002）
@@ -101,6 +101,9 @@ public func trend(for exerciseName: String, in sessions: [WorkoutSession]) -> [E
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 通过（2 SHOULD-FIX） | 30 tests、6 项指定变异全杀、98/98 行；查询侧 trim 无测试；count 断言失败后 points[0] 越界崩溃 | 2026-10-31 |
+| 2 | 通过 | 010e552 补查询 trim 断言、4 处改 try #require；30 tests | 2026-10-31 |
+| 3 | 通过 | CI（Xcode 26.6/Swift 6.3）编译失败：局部常量 volume 遮蔽 volume(of:)；95ef32e 改名 sessionVolume，CI 前红后绿 | 2026-10-31 |
 
 ## 升级说明
 

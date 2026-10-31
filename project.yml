@@ -2,6 +2,8 @@
 name: TrainingRecord
 options:
   bundleIdPrefix: com.phx
+  # 界面文案只有中文：声明中文为开发语言，系统才会以中文解析本 App 的日期等格式。
+  developmentLanguage: zh-Hans
   deploymentTarget: { iOS: "17.0" }
   createIntermediateGroups: true
 settings:
@@ -19,6 +21,8 @@ targets:
     dependencies:
       - package: TrainingRecordCore
         product: TrainingRecordCore
+      - package: TrainingRecordCore
+        product: TrainingRecordPersistence
 schemes:
   TrainingRecord:
     build:

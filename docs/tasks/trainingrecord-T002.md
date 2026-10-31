@@ -1,6 +1,6 @@
 # trainingrecord-T002 训练记录仓储接口 + 内存实现
 
-状态: planned
+状态: approved
 分支: task/trainingrecord-T002（基于 task/trainingrecord-T001 @ 4799672，堆叠开发）
 执行者: code-local
 工作目录: /Users/phx/dev/TrainingRecord-T002（独立 clone，不要用 /Users/phx/dev/TrainingRecord）
@@ -70,6 +70,8 @@ T001（PR #2）必须先合并，本单后合。若 T001 在合并前被修改�
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 通过（1 SHOULD-FIX） | 18 tests、5 种变异全杀、Core 46/46 行；InMemoryWorkoutRepositoryTests.swift:98 并发测试未 waitForAll，吞掉子任务错误 | 2026-10-31 |
+| 2 | 通过 | ddd1f0c 补 waitForAll，对照变异证实生效；18 tests、覆盖率 100% 保持 | 2026-10-31 |
 
 ## 升级说明
 
