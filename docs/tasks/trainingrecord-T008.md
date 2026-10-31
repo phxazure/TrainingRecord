@@ -1,7 +1,7 @@
 # trainingrecord-T008 动作库：数据层 + 改名同步 + 上次成绩/最近动作/复制上次训练
 
 状态: planned
-分支: task/trainingrecord-T008（基于 task/trainingrecord-T007 @ f0ae70e，堆叠开发）
+分支: task/trainingrecord-T008（基于 task/trainingrecord-T007 @ 83c1bbc（含 main 合入），堆叠开发）
 执行者: code
 里程碑: m3-library（T008 数据层 → T009 界面，两单都通过后由 hermes 开一个 PR 到 main）
 工作目录: /Users/phx/dev/TrainingRecord
@@ -133,7 +133,7 @@ public enum TrainingRecordStore {
 2. 先生成旧版存储样本（在临时 worktree 检出 bd79293 运行一段代码生成，不改该版本代码）
 3. 先写测试 → 变红 → 实现 → 全绿
 4. App 最小接线；构建 Debug/Release
-5. commit、正常 push（不 force）。**里程碑模式：不开 PR。** 通知 review：任务单路径、分支名、对比基线 f0ae70e、最终签名、样本生成方法；并回报 hermes
+5. commit、正常 push（不 force）。**里程碑模式：不开 PR。** 通知 review：任务单路径、分支名、对比基线 83c1bbc、最终签名、样本生成方法；并回报 hermes
 
 ## 审查记录
 
