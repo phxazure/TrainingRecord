@@ -2,7 +2,7 @@
 
 状态: planned
 分支: task/trainingrecord-T005（基于 task/trainingrecord-T004 审查通过的 6c036b2，堆叠开发）
-执行者: code-local
+执行者: code（原 code-local；2026-10-31 code-local 两次卡住，人类指示改由 code 接手）
 里程碑: m2-app（T004 → T005 → T006，三单完成后由 hermes 开一个 PR 到 main）
 工作目录: /Users/phx/dev/TrainingRecord
 范围:
@@ -58,7 +58,7 @@ public final class HistoryViewModel {
 - [ ] 仓储 `delete` 抛错：`sessions` 不变，`errorMessage` 非 nil
 - [ ] 失败场景用测试内的假仓储验证
 - [ ] Core 不得 `import SwiftUI` / `UIKit` / `SwiftData` / `Charts`
-- [ ] T001–T004 的源码与测试不改（`App/Record/RecordView.swift` 的遮挡修复除外，只允许布局改动）；`swift test` 全绿
+- [ ] T001–T004 的源码与测试不改（`App/Record/RecordView.swift` 的遮挡修复除外，只允许布局改动，外加下条 UI 契约授权的「仅 DEBUG 截图辅助」）；`swift test` 全绿
 - [ ] `xcodegen generate` 后 `xcodebuild build -project TrainingRecord.xcodeproj -scheme TrainingRecord -destination 'generic/platform=iOS Simulator' -quiet` 退出 0
 - [ ] 历史界面关键控件带 `accessibilityIdentifier`（至少：历史列表、每行、动作选择器、趋势图、删除操作）
 - [ ] 测试不能恒真。review 会做变异：`exerciseNames` 不去重/大小写敏感/改成字母序、`rows` 的组数少算一个动作、`delete` 失败时仍从 `sessions` 移除、`reload` 失败时清空 `sessions` —— 每一种至少让一个测试变红
@@ -76,6 +76,7 @@ public final class HistoryViewModel {
 - 系统字体与语义色，深色模式跟随系统；中文界面
 - **修复 T004 遗留问题**：「记录」页滚动到底部时，最后一个输入区（新增动作的名称框和按钮）不能被底部悬浮标签栏遮挡。用系统方式处理（如 `safeAreaPadding` / `contentMargins` / 列表底部留白），不写死像素值；不改录入逻辑
 - 截图至少 4 张：历史列表、某次训练明细、某个动作的趋势图（≥4 个数据点）、「记录」页滚动到底部（证明遮挡已修复）。可以用仅在 DEBUG 下生效的启动参数往仓储里预填样例训练数据；Release 构建不得包含样例数据
+- **截图辅助授权（hermes 于 R1 后补充）**：模拟器无法手动滚动，为拍「记录页滚到底部」允许在 `RecordView.swift` / `ContentView.swift` 加仅 DEBUG 生效、由启动参数触发的截图辅助（如 `ScrollViewReader` + `.id` 定位、启动后自动滚动、向录入草稿预填样例）。条件：整段包在 `#if DEBUG` 内或仅在 DEBUG 启动参数下生效；不带参数时行为与 T004 完全一致；不改录入逻辑；Release 产物不含这些参数
 
 ## 计划
 
@@ -95,6 +96,7 @@ public final class HistoryViewModel {
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| R1 | 打回 | BLOCKER：RecordView/ContentView 截图辅助超出范围 → hermes 已在 UI 契约补充授权；SHOULD-FIX：HistoryViewModel 旧 reload 结果可覆盖已成功的删除 | 2026-10-31 23:44 |
 
 ## 升级说明
 
