@@ -4,6 +4,7 @@ enum RecordAccessibilityID {
     static let datePicker = "record.datePicker"
     static let exerciseNameField = "record.exerciseNameField"
     static let addExerciseButton = "record.addExerciseButton"
+    static let exerciseNameError = "record.exerciseNameError"
     static let exerciseMenu = "record.exerciseMenu"
     static let weightField = "record.weightField"
     static let repsField = "record.repsField"
@@ -11,4 +12,5 @@ enum RecordAccessibilityID {
     static let setInputError = "record.setInputError"
     static let saveButton = "record.saveButton"
     static let savedToast = "record.savedToast"
+    static let retryButton = "record.retryButton"
 }

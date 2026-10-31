@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="zh-Hans" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrainingRecord · 界面设计 v1（方向 B「健身」式）</title>
+<style>
+/* ============ Tokens — 全部出自 ui/DESIGN.md，不在别处写颜色/间距 ============ */
+:root {
+  --font-text: system-ui, -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+  --font-num: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --hit: 44px;
+
+  --radius-sm: 8px; --radius-md: 10px; --radius-lg: 16px; --radius-full: 999px;
+  --radius-device: 54px; /* 仅设计稿手机外框，App 内不用 */
+
+  --t-display: 700 48px/52px var(--font-num);
+  --t-large-title: 700 34px/41px var(--font-text);
+  --t-title2: 700 22px/28px var(--font-num);
+  --t-title3: 600 20px/25px var(--font-text);
+  --t-headline: 600 17px/22px var(--font-text);
+  --t-body: 400 17px/22px var(--font-text);
+  --t-subheadline: 400 15px/20px var(--font-text);
+  --t-footnote: 400 13px/18px var(--font-text);
+  --t-caption: 500 12px/16px var(--font-text);
+  --t-caption2: 600 11px/13px var(--font-text);
+
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+}
+[data-theme="dark"] {
+  --bg: #000000; --surface: #1C1C1E; --surface-2: #2C2C2E;
+  --label: #FFFFFF; --label-2: rgba(235,235,245,.60); --label-disabled: rgba(235,235,245,.30);
+  --separator: rgba(84,84,88,.65);
+  --tint: #A6FF00; --on-tint: #000000;
+  --metric-strength: #FF4F6E; --metric-volume: #1EEAEF;
+  --danger: #FF6961; --on-danger: #000000;
+  --material: rgba(37,37,37,.72);
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg: #F2F2F7; --surface: #FFFFFF; --surface-2: #E5E5EA;
+  --label: #000000; --label-2: #636366; --label-disabled: rgba(60,60,67,.30);
+  --separator: rgba(60,60,67,.29);
+  --tint: #357000; --on-tint: #FFFFFF;
+  --metric-strength: #C8103F; --metric-volume: #006E80;
+  --danger: #C4001A; --on-danger: #FFFFFF;
+  --material: rgba(249,249,249,.78);
+  color-scheme: light;
+}
+
+/* ============ 画廊外框 ============ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); }
+body { background: var(--bg); color: var(--label); font: var(--t-body); -webkit-font-smoothing: antialiased; }
+::selection { background: var(--tint); color: var(--on-tint); }
+:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+.doc { max-width: 1440px; margin: 0 auto; padding: var(--space-8) var(--space-4) 96px; }
+.doc-head { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-end; justify-content: space-between; padding-bottom: var(--space-8); border-bottom: 1px solid var(--separator); }
+.doc-head h1 { font: var(--t-large-title); }
+.doc-head p { font: var(--t-subheadline); color: var(--label-2); max-width: 64ch; margin-top: var(--space-2); }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-3); font: var(--t-footnote); color: var(--label-2); }
+.legend span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.legend i { width: 10px; height: 10px; border-radius: var(--radius-full); display: inline-block; }
+
+.section { padding-top: var(--space-8); }
+.section > h2 { font: var(--t-title3); font-size: 28px; line-height: 34px; font-weight: 700; }
+.section > p { font: var(--t-subheadline); color: var(--label-2); max-width: 72ch; margin-top: var(--space-2); }
+.gallery { display: grid; gap: var(--space-8) var(--space-6); margin-top: var(--space-6);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 390px), 1fr)); justify-items: center; }
+figure { width: 100%; max-width: 390px; }
+figcaption { font: var(--t-subheadline); color: var(--label-2); margin-top: var(--space-3); padding: 0 var(--space-2); }
+figcaption b { color: var(--label); font-weight: 600; }
+.tag { display: inline-block; font: var(--t-caption); color: var(--tint); border: 1px solid var(--tint); border-radius: var(--radius-full); padding: 0 var(--space-2); margin-right: var(--space-1); }
+
+@media (max-width: 1099px) and (min-width: 601px) {
+  .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .doc { padding-top: var(--space-6); }
+  .gallery { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ============ 手机外框 + iOS 结构 ============ */
+.phone { position: relative; width: 100%; max-width: 390px; height: 844px; border-radius: var(--radius-device);
+  border: 1px solid var(--separator); background: var(--bg); overflow: hidden; display: flex; flex-direction: column; }
+.status { flex: none; height: 54px; display: flex; align-items: center; justify-content: space-between; padding: var(--space-1) var(--space-8) 0 40px; font: var(--t-headline); }
+.status .icons { display: flex; gap: var(--space-1); align-items: center; }
+.status svg { height: 13px; width: auto; }
+.toolbar { flex: none; height: var(--hit); display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); padding: 0 var(--space-4); }
+.toolbar.inline { justify-content: space-between; }
+.toolbar .title { font: var(--t-headline); position: absolute; left: 50%; transform: translateX(-50%); }
+.large-title { flex: none; font: var(--t-large-title); padding: 0 var(--space-4) var(--space-2); }
+.content { flex: 1; min-height: 0; overflow: hidden; padding: var(--space-2) var(--space-4) 120px; display: flex; flex-direction: column; gap: var(--space-5); }
+.content.center { justify-content: center; align-items: center; text-align: center; padding-bottom: 140px; }
+
+.tabbar { position: absolute; left: var(--space-5); right: var(--space-5); bottom: var(--space-6); height: 62px; border-radius: var(--radius-full);
+  background: var(--material); backdrop-filter: blur(20px) saturate(1.8); -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid var(--separator); display: grid; grid-template-columns: repeat(3, 1fr); padding: var(--space-1); }
+.tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--label); font: var(--t-caption2); border-radius: var(--radius-full); }
+.tab svg { width: 24px; height: 24px; }
+.tab.on { color: var(--tint); background: var(--surface-2); }
+
+/* 卡片 / 分组 */
+.group { display: flex; flex-direction: column; gap: var(--space-2); }
+.group > h3 { font: var(--t-footnote); color: var(--label-2); padding: 0 var(--space-4); font-weight: 400; }
+.card { background: var(--surface); border-radius: var(--radius-lg); padding: var(--space-4); }
+.card.list { padding: 0 0 0 var(--space-4); }
+.row { min-height: var(--hit); display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-3) 0; }
+.card.list .row + .row { border-top: 1px solid var(--separator); }
+.row .grow { flex: 1; min-width: 0; }
+.row .sub { font: var(--t-subheadline); color: var(--label-2); }
+.chev { width: 14px; height: 14px; color: var(--label-2); flex: none; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 数字 + 单位 */
+.metric { display: inline-flex; align-items: baseline; gap: var(--space-1); }
+.unit { font: var(--t-footnote); color: var(--label-2); }
+.c-strength { color: var(--metric-strength); }
+.c-volume { color: var(--metric-volume); }
+.c-tint { color: var(--tint); }
+.c-danger { color: var(--danger); }
+.c-2 { color: var(--label-2); }
+
+/* 按钮 */
+.btn { appearance: none; border: 0; font: var(--t-headline); cursor: pointer; min-height: 36px; padding: 0 var(--space-4); border-radius: var(--radius-full);
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); transition: opacity .1s, box-shadow .15s; }
+.btn-primary { background: var(--tint); color: var(--on-tint); }
+.btn-secondary { background: var(--surface-2); color: var(--tint); }
+.btn-plain { background: transparent; color: var(--tint); padding: 0 var(--space-2); }
+.btn:hover, .btn.is-hover { box-shadow: 0 0 0 4px var(--surface-2); }
+.btn:active, .btn.is-active { opacity: .7; }
+.btn.is-focus { outline: 2px solid var(--tint); outline-offset: 2px; }
+.btn:disabled, .btn.is-disabled { background: var(--surface-2); color: var(--label-disabled); cursor: default; box-shadow: none; opacity: 1; }
+.btn-plain:disabled, .btn-plain.is-disabled { background: transparent; }
+.btn.is-loading { pointer-events: none; }
+.btn-icon { width: var(--hit); height: var(--hit); min-height: var(--hit); padding: 0; border-radius: var(--radius-full); flex: none; }
+.btn-icon svg { width: 22px; height: 22px; }
+.spinner { width: 16px; height: 16px; border-radius: var(--radius-full); border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+/* 输入 */
+.field { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; min-width: 0; }
+.input { height: var(--hit); width: 100%; background: var(--surface-2); color: var(--label); border: 1.5px solid transparent; border-radius: var(--radius-md);
+  padding: 0 var(--space-3); font: var(--t-body); display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); }
+.input .ph { color: var(--label-2); }
+.input .val { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.input .suffix { font: var(--t-footnote); color: var(--label-2); }
+input.input { outline: none; }
+input.input::placeholder { color: var(--label-2); }
+.input:focus, .input.is-focus { border-color: var(--tint); }
+.input.is-error { border-color: var(--danger); }
+.input.is-disabled, .input:disabled { color: var(--label-disabled); }
+.input.is-disabled .ph, .input.is-disabled .suffix { color: var(--label-disabled); }
+.caret { display: inline-block; width: 2px; height: 22px; background: var(--tint); margin-left: 1px; vertical-align: middle; }
+.err { font: var(--t-footnote); color: var(--danger); display: flex; align-items: center; gap: var(--space-1); }
+.err svg { width: 14px; height: 14px; flex: none; }
+
+/* 录入卡片 */
+.ex-head { display: flex; align-items: center; gap: var(--space-2); }
+.ex-head h4 { font: var(--t-title3); flex: 1; min-width: 0; }
+.ex-head svg { width: 24px; height: 24px; color: var(--tint); }
+.ex-meta { font: var(--t-subheadline); color: var(--label-2); margin-top: 2px; }
+.sets { list-style: none; margin-top: var(--space-3); display: flex; flex-direction: column; }
+.set { display: flex; align-items: center; gap: var(--space-3); min-height: var(--hit); border-top: 1px solid var(--separator); }
+.idx { width: 24px; height: 24px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--label-2); font: var(--t-caption); font-family: var(--font-num); display: grid; place-items: center; flex: none; }
+.set .metric b { font: var(--t-headline); font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.set .x { color: var(--label-2); font: var(--t-subheadline); }
+.set .right { margin-left: auto; font: var(--t-subheadline); font-family: var(--font-num); }
+.add-set { display: flex; gap: var(--space-2); align-items: flex-start; padding-top: var(--space-3); border-top: 1px solid var(--separator); }
+.add-set-err { padding-top: var(--space-2); }
+.hint { font: var(--t-footnote); color: var(--label-2); padding: var(--space-3) 0; border-top: 1px solid var(--separator); }
+
+/* 日期行 */
+.date-pill { background: var(--surface-2); border-radius: var(--radius-sm); padding: 6px var(--space-3); font: var(--t-body); }
+
+/* 历史 */
+.week { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.week .k { font: var(--t-footnote); color: var(--label-2); }
+.week .metric b { font: var(--t-title2); }
+.days { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--separator); }
+.day { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); font: var(--t-caption); color: var(--label-2); }
+.day i { width: 24px; height: 24px; border-radius: var(--radius-full); background: var(--surface-2); display: block; }
+.day.on i { background: var(--tint); }
+.day.today { color: var(--label); }
+.dateblock { width: 40px; flex: none; text-align: center; }
+.dateblock b { display: block; font: var(--t-title2); }
+.dateblock span { font: var(--t-caption); color: var(--label-2); }
+.row .vol { text-align: right; flex: none; }
+.row .vol b { font: var(--t-headline); font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.swipe { position: relative; overflow: hidden; }
+.swipe .slide { transform: translateX(-88px); background: var(--surface); }
+.swipe .del { position: absolute; top: 0; bottom: 0; right: 0; width: 88px; background: var(--danger); color: var(--on-danger);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font: var(--t-footnote); font-weight: 600; }
+.swipe .del svg { width: 20px; height: 20px; }
+.banner { display: flex; gap: var(--space-3); align-items: flex-start; }
+.banner svg { width: 22px; height: 22px; color: var(--danger); flex: none; margin-top: 1px; }
+.banner b { font: var(--t-headline); display: block; }
+.banner p { font: var(--t-subheadline); color: var(--label-2); }
+
+/* 空状态 */
+.empty-icon { width: 56px; height: 56px; color: var(--label-2); }
+.empty-icon.tint { color: var(--tint); }
+.empty h2 { font: var(--t-title3); font-weight: 700; margin-top: var(--space-4); }
+.empty p { font: var(--t-subheadline); color: var(--label-2); margin-top: var(--space-2); max-width: 30ch; text-wrap: balance; }
+.empty .btn { margin-top: var(--space-6); }
+
+/* 明细 */
+.summary3 { display: grid; grid-template-columns: 1.6fr 1fr 1fr; }
+.summary3 > div + div { border-left: 1px solid var(--separator); padding-left: var(--space-4); }
+.summary3 .k { font: var(--t-footnote); color: var(--label-2); }
+.summary3 .metric b { font: var(--t-large-title); font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.summary3 .metric b.small { font: var(--t-title2); }
+.best { font: var(--t-footnote); color: var(--label-2); text-align: right; }
+.best b { font: var(--t-headline); font-family: var(--font-num); }
+.foot { display: flex; justify-content: space-between; align-items: baseline; padding-top: var(--space-3); border-top: 1px solid var(--separator); font: var(--t-subheadline); }
+.link { color: var(--tint); font: var(--t-subheadline); display: inline-flex; align-items: center; gap: 2px; }
+.link svg { width: 12px; height: 12px; }
+
+/* 趋势 */
+.controls { display: flex; flex-direction: column; gap: var(--space-3); }
+.picker { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--space-1); background: var(--surface); border-radius: var(--radius-full);
+  min-height: var(--hit); padding: 0 var(--space-4); font: var(--t-headline); color: var(--label); }
+.picker svg { width: 14px; height: 14px; color: var(--label-2); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border-radius: var(--radius-md); padding: 2px; }
+.seg span { text-align: center; font: var(--t-subheadline); font-weight: 500; padding: 6px 0; border-radius: var(--radius-sm); color: var(--label); }
+.seg span.on { background: var(--surface-2); font-weight: 600; }
+.hero .metric b { font: var(--t-display); font-variant-numeric: tabular-nums; }
+.hero .metric .unit { font: var(--t-title3); }
+.hero .delta { display: flex; align-items: center; gap: var(--space-1); font: var(--t-subheadline); margin-top: var(--space-1); }
+.hero .delta svg { width: 14px; height: 14px; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font: var(--t-caption); fill: var(--label-2); font-family: var(--font-num); }
+.chart .grid { stroke: var(--separator); stroke-width: 1; }
+
+/* 提示条 */
+.toast { position: absolute; left: var(--space-6); right: var(--space-6); bottom: 98px; min-height: 52px; border-radius: var(--radius-full);
+  background: var(--material); backdrop-filter: blur(20px) saturate(1.8); -webkit-backdrop-filter: blur(20px) saturate(1.8); border: 1px solid var(--separator);
+  display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); font: var(--t-subheadline); }
+.toast svg { width: 22px; height: 22px; flex: none; }
+.toast .msg { flex: 1; }
+.toast .btn { min-height: 36px; }
+.toast.pop { animation: pop .35s var(--ease-out) both; }
+@keyframes pop { from { transform: translateY(16px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .toast.pop { animation-name: fade; } @keyframes fade { from { opacity: 0; } } }
+
+/* 建议：最近动作 */
+.chips { display: flex; gap: var(--space-2); overflow: hidden; margin-top: var(--space-3); }
+.chip { flex: none; min-height: 36px; padding: 0 var(--space-3); border-radius: var(--radius-full); background: var(--surface-2); color: var(--label); font: var(--t-subheadline); display: inline-flex; align-items: center; }
+.chip.used { color: var(--label-disabled); }
+.last { font: var(--t-footnote); color: var(--label-2); margin-top: 2px; }
+
+/* 状态板 */
+.board { display: grid; gap: var(--space-5); margin-top: var(--space-6); grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.spec { background: var(--surface); border-radius: var(--radius-lg); padding: var(--space-4); }
+.spec h3 { font: var(--t-headline); }
+.spec > p { font: var(--t-footnote); color: var(--label-2); margin-top: 2px; }
+.spec dl { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-3); align-items: center; margin-top: var(--space-4); }
+.spec dt { font: var(--t-footnote); color: var(--label-2); }
+.spec dd { min-width: 0; }
+.spec.stack dl { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+.spec.stack dt { margin-top: var(--space-2); }
+
+/* 主题切换（画廊控件） */
+.theme-switch { display: inline-grid; grid-template-columns: 1fr 1fr; background: var(--surface); border-radius: var(--radius-md); padding: 2px; }
+.theme-switch button { appearance: none; border: 0; background: transparent; color: var(--label); font: var(--t-subheadline); font-weight: 500;
+  min-height: 36px; padding: 0 var(--space-4); border-radius: var(--radius-sm); cursor: pointer; }
+.theme-switch button:hover { color: var(--tint); }
+.theme-switch button[aria-pressed="true"] { background: var(--surface-2); font-weight: 600; }
+</style>
+</head>
+<body>
+<main class="doc">
+  <header class="doc-head">
+    <div>
+      <h1>TrainingRecord 界面设计 v1</h1>
+      <p>方向 B「健身」式：深色优先、圆体数字，最佳 1RM 和容量各有固定颜色。只用 iOS 系统控件，规范见 <code>ui/DESIGN.md</code>。待人类批准。</p>
+      <div class="legend">
+        <span><i style="background:var(--metric-strength)"></i>最佳 1RM</span>
+        <span><i style="background:var(--metric-volume)"></i>容量</span>
+        <span><i style="background:var(--tint)"></i>可点击</span>
+        <span><i style="background:var(--danger)"></i>错误 / 删除</span>
+      </div>
+    </div>
+    <div class="theme-switch" role="group" aria-label="外观">
+      <button type="button" data-set-theme="dark" aria-pressed="true">深色</button>
+      <button type="button" data-set-theme="light" aria-pressed="false">浅色</button>
+    </div>
+  </header>
+
+  <section class="section" id="record">
+    <h2>记录</h2>
+    <p>一次训练 = 日期 + 若干动作，每个动作下逐组记重量和次数。「保存」在右上角，能保存时才亮起；保存成功后表单清空，底部弹出提示并伴随触感。</p>
+    <div class="gallery" id="g-record"></div>
+  </section>
+
+  <section class="section" id="history">
+    <h2>历史</h2>
+    <p>顶部是本周汇总（训练次数、容量、哪几天练过），下面按月分组列出每次训练。容量数字始终是青色。左滑删除。</p>
+    <div class="gallery" id="g-history"></div>
+  </section>
+
+  <section class="section" id="detail">
+    <h2>训练明细</h2>
+    <p>从历史行点进来。每个动作标出最佳估算 1RM（玫红），每组右侧是该组的估算 1RM，最佳的那组同色。</p>
+    <div class="gallery" id="g-detail"></div>
+  </section>
+
+  <section class="section" id="trend">
+    <h2>趋势</h2>
+    <p>变更：从「历史」页工具栏里的分段切换，提为独立的第三个标签。先选动作，再在「最佳 1RM / 容量」之间切换；图表颜色跟随指标。纵轴不从 0 起，图下列出每次数值。</p>
+    <div class="gallery" id="g-trend"></div>
+  </section>
+
+  <section class="section" id="proposals">
+    <h2>新交互建议</h2>
+    <p>以下三条需要 Core 新增能力，<b>不在本次设计批准范围内</b>，是否实现由你和 hermes 决定。</p>
+    <div class="gallery" id="g-proposals"></div>
+  </section>
+
+  <section class="section" id="states">
+    <h2>组件状态</h2>
+    <p>每个交互组件的全部状态。iOS 无鼠标悬停，hover 指 iPad 指针；focus 指外接键盘的焦点环。本页的按钮和输入框也是真的，可以直接点、按 Tab 试。</p>
+    <div class="board" id="g-states"></div>
+  </section>
+</main>
+
+<script>
+/* ---------- 图标（对应 SF Symbols，实现时用括号里的系统符号名） ---------- */
+const I = {
+  record: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>', // square.and.pencil
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3 4v4h4"/><path d="M12 7.5V12l3 2"/></svg>', // clock.arrow.circlepath
+  trend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3v17h17"/><path d="M7 15l4-5 3 3 5-7"/></svg>', // chart.xyaxis.line
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  chevR: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  chevL: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"/></svg>',
+  updown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="12" r=".9" fill="currentColor"/><circle cx="12" cy="12" r=".9" fill="currentColor"/><circle cx="16" cy="12" r=".9" fill="currentColor"/></svg>', // ellipsis.circle
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+  ok: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="var(--on-tint)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>', // checkmark.circle.fill
+  warn: '<svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 10v5" stroke="var(--on-danger)" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="18" r="1.2" fill="var(--on-danger)"/></svg>', // exclamationmark.triangle.fill
+  bang: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M12 7v6" stroke="var(--on-danger)" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="16.8" r="1.3" fill="var(--on-danger)"/></svg>', // exclamationmark.circle.fill
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  lift: '<svg viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="28" cy="12" r="5"/><path d="M8 24h40"/><rect x="5" y="17" width="5" height="14" rx="2" fill="currentColor"/><rect x="46" y="17" width="5" height="14" rx="2" fill="currentColor"/><path d="M20 24l3 10h10l3-10M23 34l-3 14M33 34l3 14"/></svg>', // figure.strengthtraining.traditional
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 9v8H9"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>', // doc.on.doc
+  signal: '<svg viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>',
+  wifi: '<svg viewBox="0 0 16 12" fill="currentColor"><path d="M8 2.2c2.4 0 4.6.9 6.3 2.5l1.2-1.3A10.6 10.6 0 0 0 8 .4 10.6 10.6 0 0 0 .5 3.4l1.2 1.3A9 9 0 0 1 8 2.2zm0 3.6c1.4 0 2.7.5 3.7 1.4l1.3-1.3A7.2 7.2 0 0 0 8 4a7.2 7.2 0 0 0-5 1.9l1.3 1.3c1-.9 2.3-1.4 3.7-1.4zM8 9.4l2.3-2.3a3.4 3.4 0 0 0-4.6 0z"/></svg>',
+  battery: '<svg viewBox="0 0 27 13" fill="none"><rect x=".5" y=".5" width="23" height="12" rx="3.5" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="currentColor"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" fill="currentColor" opacity=".4"/></svg>',
+};
+
+/* ---------- 样例数据（与 Core 规则一致：Epley，四舍五入 0.1） ---------- */
+const WD = ['周日','周一','周二','周三','周四','周五','周六'];
+const S = (w, r) => ({ w, r });
+const sessions = [
+  { d: '2026-10-31', ex: [['卧推', [S(60,8), S(65,6), S(65,5)]], ['深蹲', [S(80,8), S(90,5)]]] },
+  { d: '2026-10-29', ex: [['硬拉', [S(120,5), S(130,3)]], ['引体向上', [S(0,10), S(0,8), S(0,6)]]] },
+  { d: '2026-10-27', ex: [['卧推', [S(60,8), S(62.5,6), S(62.5,6)]], ['划船', [S(50,10), S(55,8), S(55,8)]], ['推举', [S(35,8), S(37.5,6), S(37.5,5)]]] },
+  { d: '2026-10-24', ex: [['深蹲', [S(80,8), S(85,6), S(85,6)]], ['卧推', [S(60,8), S(62.5,5)]]] },
+  { d: '2026-10-22', ex: [['硬拉', [S(110,5), S(120,5)]]] },
+  { d: '2026-10-20', ex: [['卧推', [S(60,8), S(62.5,6), S(62.5,5)]], ['划船', [S(50,10), S(50,10)]]] },
+];
+const benchOlder = [
+  { d: '2026-09-12', sets: [S(55,8), S(57.5,6), S(57.5,6)] },
+  { d: '2026-09-19', sets: [S(57.5,8), S(60,5), S(60,5)] },
+  { d: '2026-09-26', sets: [S(57.5,8), S(60,6), S(60,6)] },
+  { d: '2026-10-03', sets: [S(60,6), S(60,6), S(60,5)] },
+  { d: '2026-10-10', sets: [S(60,8), S(62.5,5), S(62.5,5)] },
+];
+const e1rm = s => s.r < 1 ? null : (s.r === 1 ? s.w : Math.round(s.w * (1 + s.r / 30) * 10) / 10);
+const vol = sets => sets.reduce((a, s) => a + s.w * s.r, 0);
+const best = sets => Math.max(...sets.map(e1rm).filter(v => v !== null));
+const fmtW = w => Number.isInteger(w) ? String(w) : w.toFixed(1);
+const fmtN = n => Math.round(n).toLocaleString('zh-CN');
+const fmt1 = n => n.toFixed(1);
+const dt = s => new Date(s + 'T12:00:00');
+const md = s => { const d = dt(s); return `${d.getMonth() + 1}月${d.getDate()}日`; };
+const wd = s => WD[dt(s).getDay()];
+const setCount = ses => ses.ex.reduce((a, [, s]) => a + s.length, 0);
+const sesVol = ses => ses.ex.reduce((a, [, s]) => a + vol(s), 0);
+
+/* ---------- 外框 ---------- */
+const status = () => `<div class="status"><span class="num">9:41</span><span class="icons">${I.signal}${I.wifi}${I.battery}</span></div>`;
+const tabbar = on => `<nav class="tabbar">${[['record','记录'],['history','历史'],['trend','趋势']].map(([k, t]) =>
+  `<div class="tab${k === on ? ' on' : ''}">${I[k]}<span>${t}</span></div>`).join('')}</nav>`;
+const phone = ({ tab, title, toolbar = '', inline = null, body, center = false, overlay = '' }) => `
+  <div class="phone">${status()}
+    ${inline ? `<div class="toolbar inline"><span class="link" style="font:var(--t-body)">${I.chevL}${inline.back}</span><span class="title">${inline.title}</span><span style="width:44px"></span></div>`
+             : `<div class="toolbar">${toolbar}</div><div class="large-title">${title}</div>`}
+    <div class="content${center ? ' center' : ''}">${body}</div>${overlay}${tabbar(tab)}
+  </div>`;
+const fig = (cap, html) => `<figure>${html}<figcaption>${cap}</figcaption></figure>`;
+const metric = (v, unit, cls = '') => `<span class="metric ${cls}"><b class="num">${v}</b><span class="unit">${unit}</span></span>`;
+
+/* ---------- 记录 ---------- */
+const saveBtn = st => st === 'loading'
+  ? `<button class="btn btn-primary is-loading" type="button"><span class="spinner"></span>保存中</button>`
+  : `<button class="btn btn-primary" type="button"${st === 'disabled' ? ' disabled' : ''}>保存</button>`;
+const dateCard = () => `<div class="card list"><div class="row"><span class="grow">日期</span><span class="date-pill num">2026年10月31日</span></div></div>`;
+const setRows = sets => sets.map((s, i) => `<li class="set"><span class="idx">${i + 1}</span>
+  <span class="metric"><b>${fmtW(s.w)}</b><span class="unit">kg</span></span><span class="x">×</span>
+  <span class="metric"><b>${s.r}</b><span class="unit">次</span></span></li>`).join('');
+const addSetRow = (o = {}) => `<div class="add-set">
+  <div class="field"><div class="input ${o.wErr ? 'is-error' : ''} ${o.wFocus ? 'is-focus' : ''}">${o.w != null ? `<span class="val">${o.w}${o.wFocus ? '<span class="caret"></span>' : ''}</span>` : `<span class="ph">${o.wPh || '重量'}</span>`}<span class="suffix">kg</span></div>
+</div>
+  <div class="field"><div class="input ${o.rErr ? 'is-error' : ''}">${o.r != null ? `<span class="val">${o.r}</span>` : '<span class="ph">次数</span>'}<span class="suffix">次</span></div>
+</div>
+  <button class="btn btn-primary btn-icon" type="button" aria-label="添加组"${o.addDisabled ? ' disabled' : ''}>${I.plus}</button></div>
+  ${o.wErr ? `<div class="err add-set-err">${I.bang}重量需为 0–1000 kg 的数字</div>` : o.rErr ? `<div class="err add-set-err">${I.bang}次数需为 1–1000 的整数</div>` : ''}`;
+const exCard = (name, sets, o = {}) => `<div class="card">
+  <div class="ex-head"><h4>${name}</h4>${I.more}</div>
+  ${o.last ? `<div class="last">上次 ${o.last}</div>` : ''}
+  <div class="ex-meta">${sets.length ? `${sets.length} 组 · <span class="c-volume num">${fmtN(vol(sets))}</span> kg` : '还没有组，在下方输入重量和次数'}</div>
+  ${sets.length ? `<ul class="sets">${setRows(sets)}</ul>` : '<div style="height:var(--space-3)"></div>'}
+  ${addSetRow(o)}</div>`;
+const addExercise = (o = {}) => `<div class="group"><h3>添加动作</h3><div class="card">
+  <div style="display:flex;gap:var(--space-2);align-items:flex-start">
+    <div class="field"><div class="input ${o.err ? 'is-error' : ''}">${o.v ? `<span class="val" style="font-family:var(--font-text)">${o.v}</span>` : '<span class="ph">动作名称，如 卧推</span>'}</div>
+      ${o.err ? `<div class="err">${I.bang}本次训练已有「${o.v}」</div>` : ''}</div>
+    <button class="btn btn-secondary" type="button" style="min-height:44px"${o.v ? '' : ' disabled'}>添加</button>
+  </div>${o.chips || ''}</div></div>`;
+
+const s1 = sessions[0];
+const toastOk = `<div class="toast pop" role="status"><span class="c-tint">${I.ok}</span><span class="msg">已保存 · ${setCount(s1)} 组 · <span class="num">${fmtN(sesVol(s1))}</span> kg</span></div>`;
+const toastErr = `<div class="toast pop" role="alert"><span class="c-danger">${I.warn}</span><span class="msg">保存失败，训练还在，可以再试一次</span><button class="btn btn-plain" type="button">重试</button></div>`;
+const emptyRecord = (extra = '') => `<div class="card empty" style="text-align:center;padding:var(--space-8) var(--space-4)">
+  <svg class="empty-icon tint" style="margin:0 auto" ${I.lift.slice(5)}<h2>开始记录今天的训练</h2><p style="margin-inline:auto">添加第一个动作，再逐组记下重量和次数。</p>${extra}</div>`;
+
+document.getElementById('g-record').innerHTML = [
+  fig('<b>空状态</b> · 还没有动作，「保存」禁用。动作名输入框紧跟在引导下面。',
+    phone({ tab: 'record', title: '记录', toolbar: saveBtn('disabled'), body: dateCard() + emptyRecord() + addExercise() })),
+  fig('<b>已录入</b> · 两个动作、五组。小计里的容量用青色。',
+    phone({ tab: 'record', title: '记录', toolbar: saveBtn(), body: dateCard() + exCard('卧推', s1.ex[0][1]) + exCard('深蹲', s1.ex[1][1]) })),
+  fig('<b>输入错误 + 保存中</b> · 错误就地显示在输入框下，不弹窗。保存中仍可继续编辑。',
+    phone({ tab: 'record', title: '记录', toolbar: saveBtn('loading'), body: dateCard() + exCard('卧推', s1.ex[0][1], { w: '-60', r: '0', wErr: true }) + addExercise({ v: '卧推', err: true }) })),
+  fig('<b>保存成功</b> · 表单清空回到空状态，底部提示条 2 秒后消失，同时触感反馈。',
+    phone({ tab: 'record', title: '记录', toolbar: saveBtn('disabled'), body: dateCard() + emptyRecord() + addExercise(), overlay: toastOk })),
+  fig('<b>保存失败</b> · 表单保留，提示条不自动消失，带「重试」。',
+    phone({ tab: 'record', title: '记录', toolbar: saveBtn(), body: dateCard() + exCard('卧推', s1.ex[0][1], { w: '6', wFocus: true }) + exCard('深蹲', s1.ex[1][1]), overlay: toastErr })),
+].join('');
+
+/* ---------- 历史 ---------- */
+const today = dt(sessions[0].d);
+const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const week = sessions.filter(s => s.d >= iso(monday));
+const weekDays = new Set(week.map(s => dt(s.d).getDay()));
+const weekCard = () => `<div class="group"><h3>本周 · ${md(iso(monday))}–${md(iso(sunday))}</h3><div class="card week">
+  <div><div class="k">训练</div>${metric(week.length, '次')}</div>
+  <div><div class="k">容量</div>${metric(fmtN(week.reduce((a, s) => a + sesVol(s), 0)), 'kg', 'c-volume')}</div>
+  <div class="days">${[1,2,3,4,5,6,0].map(i => `<div class="day${weekDays.has(i) ? ' on' : ''}${i === today.getDay() ? ' today' : ''}"><i></i>${WD[i].slice(1)}</div>`).join('')}</div>
+</div></div>`;
+const hRow = (s, o = {}) => {
+  const d = dt(s.d);
+  const inner = `<div class="row${o.swipe ? ' slide' : ''}"><div class="dateblock"><b class="num">${d.getDate()}</b><span>${wd(s.d)}</span></div>
+    <div class="grow"><div class="ellipsis" style="font:var(--t-headline)">${s.ex.map(e => e[0]).join('、')}</div><div class="sub">${setCount(s)} 组</div></div>
+    <div class="vol"><span class="metric c-volume"><b>${fmtN(sesVol(s))}</b><span class="unit">kg</span></span></div>${I.chevR}</div>`;
+  return o.swipe ? `<div class="swipe">${inner}<div class="del">${I.trash}删除</div></div>` : inner;
+};
+const historyList = (o = {}) => weekCard() + `<div class="group"><h3>10月</h3><div class="card list">${sessions.map((s, i) => hRow(s, { swipe: o.swipe === i })).join('')}</div></div>`;
+const errBanner = (title, msg) => `<div class="card banner" role="alert">${I.warn}<div style="flex:1"><b>${title}</b><p>${msg}</p></div><button class="btn btn-plain" type="button">重试</button></div>`;
+const unavailable = (icon, title, msg, btn = '') => `<div class="empty"><svg class="empty-icon" style="margin:0 auto" ${icon.slice(5)}<h2>${title}</h2><p style="margin-inline:auto">${msg}</p>${btn}</div>`;
+
+document.getElementById('g-history').innerHTML = [
+  fig('<b>列表</b> · 本周汇总 + 按月分组。行：日期 · 动作 · 组数 · 容量。',
+    phone({ tab: 'history', title: '历史', body: historyList() })),
+  fig('<b>左滑删除</b> · 系统 swipeActions，可整行滑到底直接删除。',
+    phone({ tab: 'history', title: '历史', body: historyList({ swipe: 1 }) })),
+  fig('<b>空状态</b> · ContentUnavailableView，按钮切到「记录」标签。',
+    phone({ tab: 'history', title: '历史', center: true, body: unavailable(I.history, '还没有训练记录', '在「记录」里保存一次训练，就会出现在这里。', '<button class="btn btn-primary" type="button" style="min-height:44px">去记录</button>') })),
+  fig('<b>首次加载</b> · 只在没有旧数据时出现；之后的刷新静默进行。',
+    phone({ tab: 'history', title: '历史', center: true, body: `<div style="display:flex;align-items:center;gap:var(--space-2);color:var(--label-2);font:var(--t-subheadline)"><span class="spinner"></span>正在加载…</div>` })),
+  fig('<b>加载失败</b> · 保留上次结果，顶部说明并可重试。删除失败同样位置，文案「删除失败，这次训练还在。」',
+    phone({ tab: 'history', title: '历史', body: errBanner('无法加载训练历史', '下面是上次加载的结果。') + historyList() })),
+].join('');
+
+/* ---------- 明细 ---------- */
+const detailCard = (name, sets) => {
+  const b = best(sets);
+  return `<div class="card"><div class="ex-head"><h4>${name}</h4><div class="best">最佳 1RM<br>${metric(fmt1(b), 'kg', 'c-strength')}</div></div>
+    <ul class="sets">${sets.map((s, i) => { const e = e1rm(s); return `<li class="set"><span class="idx">${i + 1}</span>
+      <span class="metric"><b>${fmtW(s.w)}</b><span class="unit">kg</span></span><span class="x">×</span><span class="metric"><b>${s.r}</b><span class="unit">次</span></span>
+      <span class="right ${e === b ? 'c-strength' : 'c-2'}">${e === null ? '—' : fmt1(e)}</span></li>`; }).join('')}</ul>
+    <div class="foot"><span>容量 <span class="c-volume num">${fmtN(vol(sets))}</span> kg</span><span class="link">查看趋势${I.chevR.replace('class="chev"', '')}</span></div></div>`;
+};
+document.getElementById('g-detail').innerHTML = [
+  fig('<b>明细</b> · 顶部三项汇总；每组右侧是该组估算 1RM，最佳组为玫红。「查看趋势」跳到趋势标签并选中该动作。',
+    phone({ tab: 'history', inline: { back: '历史', title: `${md(s1.d)} ${wd(s1.d)}` }, body:
+      `<div class="card summary3"><div><div class="k">容量</div>${metric(fmtN(sesVol(s1)), 'kg', 'c-volume')}</div><div><div class="k">组数</div>${metric(setCount(s1), '组')}</div><div><div class="k">动作</div>${metric(s1.ex.length, '个')}</div></div>`
+      + s1.ex.map(([n, s]) => detailCard(n, s)).join('') })),
+].join('');
+
+/* ---------- 趋势 ---------- */
+const benchPts = [...benchOlder.map(x => ({ d: x.d, sets: x.sets })),
+  ...sessions.filter(s => s.ex.some(e => e[0] === '卧推')).map(s => ({ d: s.d, sets: s.ex.find(e => e[0] === '卧推')[1] })).reverse()]
+  .sort((a, b) => a.d.localeCompare(b.d))
+  .map(p => ({ d: p.d, e: best(p.sets), v: vol(p.sets) }));
+
+function chart(pts, key, color) {
+  const W = 326, H = 180, padR = 36, padB = 22;
+  const vals = pts.map(p => p[key]);
+  let lo = Math.min(...vals), hi = Math.max(...vals); const span = hi - lo || 1;
+  lo -= span * .15; hi += span * .15;
+  const step = key === 'e' ? 2.5 : 250; lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+  const ticks = []; const tStep = Math.ceil((hi - lo) / step / 4) * step; for (let t = lo; t <= hi + 1e-9; t += tStep) ticks.push(t);
+  const x = i => i * (W - padR - 8) / (pts.length - 1) + 4, y = v => (H - padB) - (v - lo) / (hi - lo) * (H - padB - 8);
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join('');
+  const xl = [0, Math.floor((pts.length - 1) / 2), pts.length - 1];
+  return `<div class="card chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="卧推 ${key === 'e' ? '最佳 1RM' : '容量'}趋势">
+    ${ticks.map(t => `<line class="grid" x1="0" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}"/><text x="${W - padR + 6}" y="${y(t) + 4}">${key === 'e' ? fmtW(t) : fmtN(t)}</text>`).join('')}
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p[key])}" r="${i === pts.length - 1 ? 5.5 : 3.5}" fill="${color}" stroke="var(--surface)" stroke-width="${i === pts.length - 1 ? 2 : 0}"/>`).join('')}
+    ${xl.map(i => `<text x="${x(i)}" y="${H - 4}" text-anchor="${i === 0 ? 'start' : i === pts.length - 1 ? 'end' : 'middle'}">${dt(pts[i].d).getMonth() + 1}/${dt(pts[i].d).getDate()}</text>`).join('')}
+  </svg></div>`;
+}
+function trendBody(key) {
+  const color = key === 'e' ? 'var(--metric-strength)' : 'var(--metric-volume)', cls = key === 'e' ? 'c-strength' : 'c-volume';
+  const last = benchPts.at(-1), prev = benchPts.at(-2), diff = last[key] - prev[key];
+  const f = key === 'e' ? fmt1 : fmtN;
+  return `<div class="controls"><span class="picker">卧推${I.updown}</span>
+      <div class="seg" role="tablist"><span class="${key === 'e' ? 'on' : ''}">最佳 1RM</span><span class="${key === 'v' ? 'on' : ''}">容量</span></div></div>
+    <div class="hero"><div class="metric ${cls}"><b class="num">${f(last[key])}</b><span class="unit">kg</span></div>
+      <div class="delta ${diff >= 0 ? cls : 'c-2'}">${diff >= 0 ? I.up : I.down}<span>较上次 ${diff >= 0 ? '+' : '−'}<span class="num">${f(Math.abs(diff))}</span> kg</span><span class="c-2">· ${md(last.d)} · 近 ${benchPts.length} 次</span></div></div>
+    ${chart(benchPts, key, color)}
+    <div class="card list">${benchPts.slice().reverse().slice(0, 3).map(p => `<div class="row"><span class="grow">${md(p.d)} <span class="c-2">${wd(p.d)}</span></span>${metric(f(p[key]), 'kg', cls)}</div>`).join('')}</div>`;
+}
+document.getElementById('g-trend').innerHTML = [
+  fig('<b>最佳 1RM</b> · 当前值用最大的字，变化不用红绿，上升用指标色，下降用灰色。',
+    phone({ tab: 'trend', title: '趋势', body: trendBody('e') })),
+  fig('<b>容量</b> · 切换后折线、大数字、列表数值一起换成青色；分段控件本身保持系统样式。',
+    phone({ tab: 'trend', title: '趋势', body: trendBody('v') })),
+  fig('<b>只有一次记录</b> · 显示当前值，提示再练一次即可连成线，不画单点图。',
+    phone({ tab: 'trend', title: '趋势', body: `<div class="controls"><span class="picker">推举${I.updown}</span><div class="seg"><span class="on">最佳 1RM</span><span>容量</span></div></div>
+      <div class="hero"><div class="metric c-strength"><b class="num">${fmt1(best(sessions[2].ex[2][1]))}</b><span class="unit">kg</span></div><div class="delta c-2">${md(sessions[2].d)} · 第 1 次</div></div>
+      <div class="card" style="text-align:center;padding:var(--space-8) var(--space-4)"><svg class="empty-icon" style="margin:0 auto;width:40px;height:40px" ${I.trend.slice(5)}<p style="font:var(--t-subheadline);color:var(--label-2);margin-top:var(--space-3)">再记录一次「推举」就能连成趋势</p></div>` })),
+  fig('<b>无数据</b> · 还没有保存过训练。',
+    phone({ tab: 'trend', title: '趋势', center: true, body: unavailable(I.trend, '还没有可看的趋势', '保存训练后，每个动作都会有自己的趋势图。') })),
+].join('');
+
+/* ---------- 建议 ---------- */
+const chips = used => `<div class="chips" aria-label="最近动作">${['深蹲', '卧推', '硬拉', '引体向上', '划船', '推举'].map(n => `<span class="chip${used.includes(n) ? ' used' : ''}">${n}</span>`).join('')}</div>`;
+document.getElementById('g-proposals').innerHTML = [
+  fig('<span class="tag">建议 P1</span> 动作卡片显示上次成绩，重量框以上次重量作占位。',
+    phone({ tab: 'record', title: '记录', toolbar: saveBtn(), body: dateCard()
+      + exCard('卧推', s1.ex[0][1].slice(0, 2), { last: '10月27日 · 62.5 kg × 6', wPh: '62.5' })
+      + exCard('深蹲', [], { last: '10月24日 · 85 kg × 6', wPh: '85', addDisabled: true })
+      + addExercise({ chips: chips(['卧推', '深蹲']) }) })),
+  fig('<span class="tag">建议 P2</span><span class="tag">建议 P3</span> 空状态多一个次要按钮：复制上次训练的动作（不复制组）；添加动作下方是最近动作，点按即添加，已在本次训练里的置灰。',
+    phone({ tab: 'record', title: '记录', toolbar: saveBtn('disabled'), body: dateCard()
+      + emptyRecord(`<button class="btn btn-secondary" type="button" style="margin-top:var(--space-6);min-height:44px">${I.copy}复制上次训练</button><p class="c-2" style="font:var(--t-footnote);margin:var(--space-2) auto 0">10月29日 · 硬拉、引体向上</p>`)
+      + addExercise({ chips: chips([]) }) })),
+].join('');
+
+/* ---------- 组件状态板 ---------- */
+const spec = (title, note, rows, cls = '') => `<div class="spec ${cls}"><h3>${title}</h3><p>${note}</p><dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></div>`;
+const inp = (cls, content, suffix = 'kg') => `<div class="input ${cls}">${content}<span class="suffix">${suffix}</span></div>`;
+document.getElementById('g-states').innerHTML = [
+  spec('主按钮 · 保存', 'capsule，tint 填充', [
+    ['default', '<button class="btn btn-primary" type="button">保存</button>'],
+    ['hover', '<button class="btn btn-primary is-hover" type="button">保存</button>'],
+    ['focus', '<button class="btn btn-primary is-focus" type="button">保存</button>'],
+    ['active', '<button class="btn btn-primary is-active" type="button">保存</button>'],
+    ['disabled', '<button class="btn btn-primary" type="button" disabled>保存</button>'],
+    ['loading', saveBtn('loading')],
+    ['error', `<span class="c-2" style="font:var(--t-footnote)">按钮回到 default，错误走底部提示条（见「记录 · 保存失败」）</span>`],
+  ]),
+  spec('次要 / 文字按钮', '添加、去记录、重试、复制上次训练', [
+    ['default', '<button class="btn btn-secondary" type="button">添加</button> <button class="btn btn-plain" type="button">重试</button>'],
+    ['hover', '<button class="btn btn-secondary is-hover" type="button">添加</button> <button class="btn btn-plain is-hover" type="button">重试</button>'],
+    ['focus', '<button class="btn btn-secondary is-focus" type="button">添加</button> <button class="btn btn-plain is-focus" type="button">重试</button>'],
+    ['active', '<button class="btn btn-secondary is-active" type="button">添加</button> <button class="btn btn-plain is-active" type="button">重试</button>'],
+    ['disabled', '<button class="btn btn-secondary" type="button" disabled>添加</button> <button class="btn btn-plain" type="button" disabled>重试</button>'],
+    ['loading', '<button class="btn btn-plain is-loading" type="button"><span class="spinner"></span>重试中</button>'],
+  ]),
+  spec('加组按钮', '44×44 圆形', [
+    ['default', `<button class="btn btn-primary btn-icon" type="button" aria-label="添加组">${I.plus}</button>`],
+    ['hover', `<button class="btn btn-primary btn-icon is-hover" type="button" aria-label="添加组">${I.plus}</button>`],
+    ['focus', `<button class="btn btn-primary btn-icon is-focus" type="button" aria-label="添加组">${I.plus}</button>`],
+    ['active', `<button class="btn btn-primary btn-icon is-active" type="button" aria-label="添加组">${I.plus}</button>`],
+    ['disabled', `<button class="btn btn-primary btn-icon" type="button" aria-label="添加组" disabled>${I.plus}</button>`],
+  ]),
+  spec('数字输入 · 重量', '.decimalPad；次数同理用 .numberPad', [
+    ['default', inp('', '<span class="ph">重量</span>')],
+    ['focus', inp('is-focus', '<span class="val">62.5<span class="caret"></span></span>')],
+    ['filled', inp('', '<span class="val">62.5</span>')],
+    ['error', inp('is-error', '<span class="val">-60</span>') + `<div class="err" style="margin-top:var(--space-1)">${I.bang}重量需为 0–1000 kg 的数字</div>`],
+    ['disabled', inp('is-disabled', '<span class="ph">重量</span>')],
+    ['试一试', '<input class="input" inputmode="decimal" placeholder="重量（可聚焦）" aria-label="重量">'],
+  ]),
+  spec('历史行', 'List 行 + swipeActions', [
+    ['default', `<div class="card list" style="background:var(--bg)">${hRow(sessions[0])}</div>`],
+    ['active', `<div class="card list" style="background:var(--surface-2)">${hRow(sessions[0])}</div>`],
+    ['swipe', `<div class="card list" style="background:var(--bg)">${hRow(sessions[0], { swipe: true })}</div>`],
+  ], 'stack'),
+  spec('分段控件 · 指标', '系统 Picker(.segmented)，不改色；指标色由下方大数字和图表承担', [
+    ['1RM', '<div class="seg" style="background:var(--bg)"><span class="on">最佳 1RM</span><span>容量</span></div>'],
+    ['容量', '<div class="seg" style="background:var(--bg)"><span>最佳 1RM</span><span class="on">容量</span></div>'],
+    ['focus', '<div class="seg" style="background:var(--bg);outline:2px solid var(--tint);outline-offset:2px"><span class="on">最佳 1RM</span><span>容量</span></div>'],
+    ['disabled', '<div class="seg" style="background:var(--bg);color:var(--label-disabled)"><span style="color:inherit">最佳 1RM</span><span style="color:inherit">容量</span></div>'],
+  ]),
+].join('');
+
+/* ---------- 主题切换 ---------- */
+document.querySelectorAll('[data-set-theme]').forEach(b => b.addEventListener('click', () => {
+  document.documentElement.dataset.theme = b.dataset.setTheme;
+  document.querySelectorAll('[data-set-theme]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+}));
+const q = new URLSearchParams(location.search).get('theme');
+if (q) document.querySelector(`[data-set-theme="${q}"]`)?.click();
+</script>
+</body>
+</html>
