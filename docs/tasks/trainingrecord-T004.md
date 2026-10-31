@@ -1,6 +1,6 @@
 # trainingrecord-T004 训练录入：ViewModel + 录入界面
 
-状态: planned
+状态: approved
 分支: task/trainingrecord-T004（基于 main @ 94408b9）
 执行者: code
 里程碑: m2-app（T004 录入 → T005 历史与趋势 → T006 本地持久化，三单完成后由 hermes 开一个 PR 到 main）
@@ -107,6 +107,8 @@ public final class RecordViewModel {
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 通过（1 SHOULD-FIX） | 50 tests、8 种变异全杀；保存 await 期间 Core 接受新编辑，完成后被一并清空（静默丢数据） | 2026-10-31 |
+| 2 | 通过 | 6c036b2 保存成功只移除快照内容，保留期间编辑；55 tests、12 种变异全杀 | 2026-10-31 |
 
 ## 升级说明
 

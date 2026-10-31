@@ -1,6 +1,6 @@
 # trainingrecord-T005 训练历史 + 单动作趋势图
 
-状态: planned
+状态: approved
 分支: task/trainingrecord-T005（基于 task/trainingrecord-T004 审查通过的 6c036b2，堆叠开发）
 执行者: code（原 code-local；2026-10-31 code-local 两次卡住，人类指示改由 code 接手）
 里程碑: m2-app（T004 → T005 → T006，三单完成后由 hermes 开一个 PR 到 main）
@@ -97,6 +97,7 @@ public final class HistoryViewModel {
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
 | R1 | 打回 | BLOCKER：RecordView/ContentView 截图辅助超出范围 → hermes 已在 UI 契约补充授权；SHOULD-FIX：HistoryViewModel 旧 reload 结果可覆盖已成功的删除 | 2026-10-31 23:44 |
+| R2 | 通过 | e5f7454 截图辅助改为仅 DEBUG+启动参数；reload 代次检查修复，24 种交错组合通过；66 tests | 2026-10-31 23:56 |
 
 ## 升级说明
 

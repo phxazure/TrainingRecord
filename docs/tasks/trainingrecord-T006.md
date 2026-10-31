@@ -1,6 +1,6 @@
 # trainingrecord-T006 本地持久化（SwiftData）+ 中文本地化
 
-状态: planned
+状态: approved
 分支: task/trainingrecord-T006（基于 task/trainingrecord-T005 审查通过的 e5f7454，堆叠开发）
 执行者: code
 里程碑: m2-app（T004 → T005 → T006，三单完成后由 hermes 开一个 PR 到 main）
@@ -78,6 +78,8 @@ App 接入：
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 打回（1 BLOCKER） | 83 tests 通过；-seedRecordSample 预填草稿保存后写入真实磁盘存储（仅 DEBUG） | 2026-11-01 01:33 |
+| 2 | 通过 | bd79293 三个样例参数统一在建持久容器前走内存仓储；真实 UI 16 次 XCTest 验证磁盘不变；Release 不含参数 | 2026-11-01 |
 
 ## 升级说明
 
