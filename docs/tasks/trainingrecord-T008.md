@@ -6,7 +6,7 @@
 里程碑: m3-library（T008 数据层 → T009 界面，两单都通过后由 hermes 开一个 PR 到 main）
 工作目录: /Users/phx/dev/TrainingRecord
 范围:
-  - Sources/TrainingRecordCore/（新增文件不限；可修改 Models.swift、RecordViewModel.swift）
+  - Sources/TrainingRecordCore/（新增文件不限；可修改 Models.swift、RecordViewModel.swift；R1 后追加：可修改 WorkoutRepository.swift、InMemoryWorkoutRepository.swift，仅限下方「R1 追加：原子重写」所需）
   - Tests/TrainingRecordCoreTests/（只新增文件；已有测试文件不改）
   - Sources/TrainingRecordPersistence/（新增、修改不限）
   - Tests/TrainingRecordPersistenceTests/（只新增文件和测试资源；已有测试文件不改）
@@ -118,6 +118,14 @@ public enum TrainingRecordStore {
 - [ ] **旧存储兼容（关键）**：用 T006 已合并版本（main 上的 `bd79293` 代码）生成一个含 2 场训练、3 个动作的磁盘存储文件，作为测试资源提交；测试用新代码打开它：能读出全部场次且数据一致，`backfill()` 后每个条目都有 id、动作库有对应 3 条「未分类」。交付消息里写明样本是怎么生成的
 - [ ] 动作库与训练在同一存储文件，重开后都在
 
+R1 追加：原子重写（hermes 2026-11-01，依据 review R1 BLOCKER「删除后训练复活」）：
+- [ ] 改名、合并、回填对历史的重写，必须在仓储内部**原子地**完成「读当前值 → 变换 → 保存」，并且**只更新仍然存在的记录**；不能在 service 里用两次 await 拼成「先查再存」
+- [ ] 推荐做法：新增一个单独的协议（例如 `SessionRewriting`），提供原子的「按条件改写现有场次」能力，由 `InMemoryWorkoutRepository` 和 `SwiftDataWorkoutRepository` 实现；`ExerciseLibraryService` 依赖 `any WorkoutRepository & SessionRewriting`。这样不用给 `WorkoutRepository` 加必选方法，已有测试里的假仓储不受影响。若改用别的方案（如统一写操作协调器），历史页删除和所有相关保存必须真正经过同一个协调边界
+- [ ] `save` 继续保持「新增或覆盖」的语义，不改
+- [ ] 内存与 SwiftData 实现语义一致
+- [ ] 确定性交错测试（只加在新文件里）：删除发生在候选枚举之后、重写提交之前，回填、改名、合并三条路径都不会让被删的训练复活；原有的覆盖、错误回滚、迁移幂等测试保持通过
+- [ ] 变异：把原子重写改回「先读后存」，交错测试必须变红
+
 通用：
 - [ ] T001–T007 已有测试文件一字不改，全部通过
 - [ ] Core 不得 import SwiftUI/UIKit/SwiftData
@@ -139,6 +147,7 @@ public enum TrainingRecordStore {
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 打回（1 BLOCKER / 1 SHOULD-FIX） | BLOCKER：后台回填与历史删除交错，被删训练被重写复活（ExerciseLibraryService.swift:262–265）；SHOULD-FIX：空模板语义（hermes 裁定见 e0dfca5） | 2026-11-01 |
 
 ## 升级说明
 
