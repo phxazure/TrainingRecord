@@ -77,26 +77,47 @@ public final class RecordViewModel {
     }
 
     /// 把草稿写入仓储：只保存含组的动作，顺序与录入一致。
-    /// 成功后清空动作、日期重置为 `now()`，返回写入的场次；
-    /// `canSave == false` 时抛 `RecordSaveError.nothingToSave` 且不写入；仓储抛错时原样抛出，草稿不变。
+    /// `canSave == false` 时抛 `RecordSaveError.nothingToSave`，已有保存进行中时抛 `RecordSaveError.saveInProgress`，均不写入。
+    ///
+    /// 保存期间的编辑：仓储写入的是开始保存那一刻的快照；await 期间草稿照常可编辑，编辑如实生效。
+    /// - 成功：只从草稿移除快照里已保存的组，快照中的动作因此变空则一并移除（快照里原本就没有组的空动作也移除）；
+    ///   快照之后新增的动作和组保留，顺序不变。日期在保存期间未改动则重置为 `now()`，被改动过则保留新值。
+    ///   返回写入仓储的场次。
+    /// - 失败：仓储的错误原样抛出；草稿不做任何移除（快照内容和保存期间的新编辑都保留），日期不变。
     @discardableResult
     public func save() async throws -> WorkoutSession {
         guard !isSaving else { throw RecordSaveError.saveInProgress }
         guard canSave else { throw RecordSaveError.nothingToSave }
 
-        let entries = exercises.compactMap { draft -> ExerciseEntry? in
+        let snapshot = exercises
+        let snapshotDate = date
+        let entries = snapshot.compactMap { draft -> ExerciseEntry? in
             guard !draft.sets.isEmpty else { return nil }
             let sets = draft.sets.compactMap { SetEntry(weight: $0.weight, reps: $0.reps) }
             return ExerciseEntry(name: draft.name, sets: sets)
         }
-        let session = WorkoutSession(date: date, exercises: entries)
+        let session = WorkoutSession(date: snapshotDate, exercises: entries)
 
         isSaving = true
         defer { isSaving = false }
         try await repository.save(session)
 
-        exercises = []
-        date = now()
+        removeSaved(snapshot)
+        if date == snapshotDate {
+            date = now()
+        }
         return session
+    }
+
+    /// 从当前草稿中移除快照里已保存的内容，保留快照之后的新编辑。
+    private func removeSaved(_ snapshot: [ExerciseDraft]) {
+        let savedExerciseIDs = Set(snapshot.map(\.id))
+        let savedSetIDs = Set(snapshot.flatMap { $0.sets.map(\.id) })
+        exercises = exercises.compactMap { exercise in
+            guard savedExerciseIDs.contains(exercise.id) else { return exercise }
+            var remaining = exercise
+            remaining.sets.removeAll { savedSetIDs.contains($0.id) }
+            return remaining.sets.isEmpty ? nil : remaining
+        }
     }
 }

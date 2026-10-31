@@ -15,6 +15,55 @@ private struct FailingRepository: WorkoutRepository {
 /// 固定的「当前时间」，测试不依赖真实时钟。
 private let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
 
+/// 写入会停在 continuation 上、由测试手动放行（或令其失败）的假仓储，用于构造「保存进行中」的异步交错。
+private actor GatedRepository: WorkoutRepository {
+    struct Boom: Error, Equatable {}
+
+    private(set) var stored: [WorkoutSession] = []
+    /// `save` 被调用的次数（含被拒绝的并发调用）。
+    private(set) var saveCalls = 0
+    private var gate: CheckedContinuation<Void, any Error>?
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+
+    /// 已有写入挂起时又来一次写入：直接报错，而不是覆盖 gate 导致前一次永远挂起（测试会卡死而不是变红）。
+    struct OverlappingSave: Error {}
+
+    func save(_ session: WorkoutSession) async throws {
+        saveCalls += 1
+        if gate != nil { throw OverlappingSave() }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            gate = continuation
+            for waiter in startWaiters { waiter.resume() }
+            startWaiters = []
+        }
+        stored.append(session)
+    }
+
+    func session(id: UUID) async throws -> WorkoutSession? { stored.first { $0.id == id } }
+    func allSessions() async throws -> [WorkoutSession] { stored }
+    func delete(id: UUID) async throws { stored.removeAll { $0.id == id } }
+
+    /// 等到 `save` 已经进入并挂起在 gate 上。
+    func waitUntilSaveStarted() async {
+        if gate != nil { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            startWaiters.append(continuation)
+        }
+    }
+
+    /// 放行挂起中的写入（成功）。
+    func release() {
+        gate?.resume()
+        gate = nil
+    }
+
+    /// 令挂起中的写入失败。
+    func fail() {
+        gate?.resume(throwing: Boom())
+        gate = nil
+    }
+}
+
 @MainActor
 @Suite struct RecordViewModelTests {
     let repository = InMemoryWorkoutRepository()
@@ -277,5 +326,133 @@ private let fixedNow = Date(timeIntervalSince1970: 1_700_000_000)
         #expect(model.exercises == before)
         #expect(model.date == chosenDate)
         #expect(model.canSave == true)
+    }
+}
+
+// MARK: - 保存期间的编辑（异步交错）
+//
+// 策略 (b)：保存期间照常接受编辑；仓储只写入 await 前的快照。
+// 成功后只从草稿移除快照里已保存的组（以及快照里的动作在移除后变空的），快照之后的新编辑全部保留；
+// 日期若在保存期间被改过则保留新日期，否则重置为 now()。失败时草稿（含保存期间的新编辑）原样保留。
+
+/// 草稿摘要，便于整体比较：「动作名:重量x次数,…」。
+@MainActor
+private func summary(_ model: RecordViewModel) -> [String] {
+    model.exercises.map { exercise in
+        exercise.name + ":" + exercise.sets.map { "\($0.weight)x\($0.reps)" }.joined(separator: ",")
+    }
+}
+
+extension RecordViewModelTests {
+    @Test func editsDuringSaveAreKeptAfterSuccess() async throws {
+        let gated = GatedRepository()
+        let model = makeModel(repository: gated)
+        model.date = Date(timeIntervalSince1970: 1_600_000_000)
+        let bench = try addExercise("卧推", to: model)
+        let empty = try addExercise("空动作", to: model)
+        #expect(model.addSet(toExercise: bench, weightText: "60", repsText: "8") == nil)
+
+        let saving = Task { try await model.save() }
+        await gated.waitUntilSaveStarted()
+        #expect(model.isSaving)
+
+        // 保存进行中的编辑：都应报告成功并真正生效。
+        #expect(model.addExercise(name: "深蹲"))
+        let squat = try #require(model.exercises.last?.id)
+        #expect(model.addSet(toExercise: squat, weightText: "100", repsText: "5") == nil)
+        #expect(model.addSet(toExercise: bench, weightText: "70", repsText: "6") == nil)
+        #expect(model.addSet(toExercise: empty, weightText: "20", repsText: "12") == nil)
+
+        await gated.release()
+        let saved = try await saving.value
+
+        // 仓储只含快照内容。
+        #expect(saved.exercises.map(\.name) == ["卧推"])
+        #expect(saved.exercises[0].sets == [SetEntry(weight: 60, reps: 8)!])
+        #expect(await gated.stored == [saved])
+        // 草稿只移除已保存的组，新编辑保留，顺序不变。
+        #expect(summary(model) == ["卧推:70.0x6", "空动作:20.0x12", "深蹲:100.0x5"])
+        #expect(model.exercises.map(\.id) == [bench, empty, squat])
+        #expect(model.date == fixedNow)
+        #expect(model.isSaving == false)
+        #expect(model.canSave)
+    }
+
+    @Test func dateChangedDuringSaveIsKept() async throws {
+        let gated = GatedRepository()
+        let model = makeModel(repository: gated)
+        let original = Date(timeIntervalSince1970: 1_600_000_000)
+        let changed = Date(timeIntervalSince1970: 1_650_000_000)
+        model.date = original
+        let bench = try addExercise("卧推", to: model)
+        #expect(model.addSet(toExercise: bench, weightText: "60", repsText: "8") == nil)
+
+        let saving = Task { try await model.save() }
+        await gated.waitUntilSaveStarted()
+        model.date = changed
+        await gated.release()
+        let saved = try await saving.value
+
+        #expect(saved.date == original)
+        #expect(model.date == changed)
+        #expect(model.exercises.isEmpty)
+    }
+
+    @Test func removalsDuringSaveApplyToDraftButSnapshotIsStillSaved() async throws {
+        let gated = GatedRepository()
+        let model = makeModel(repository: gated)
+        let bench = try addExercise("卧推", to: model)
+        let row = try addExercise("划船", to: model)
+        #expect(model.addSet(toExercise: bench, weightText: "60", repsText: "8") == nil)
+        #expect(model.addSet(toExercise: row, weightText: "50", repsText: "12") == nil)
+
+        let saving = Task { try await model.save() }
+        await gated.waitUntilSaveStarted()
+        model.removeExercise(id: bench)
+        #expect(model.exercises.map(\.id) == [row])
+        await gated.release()
+        let saved = try await saving.value
+
+        #expect(saved.exercises.map(\.name) == ["卧推", "划船"])
+        #expect(model.exercises.isEmpty)
+    }
+
+    @Test func failedSaveKeepsSnapshotAndEditsMadeDuringSave() async throws {
+        let gated = GatedRepository()
+        let model = makeModel(repository: gated)
+        let original = Date(timeIntervalSince1970: 1_600_000_000)
+        model.date = original
+        let bench = try addExercise("卧推", to: model)
+        #expect(model.addSet(toExercise: bench, weightText: "60", repsText: "8") == nil)
+
+        let saving = Task { try await model.save() }
+        await gated.waitUntilSaveStarted()
+        #expect(model.addExercise(name: "深蹲"))
+        let squat = try #require(model.exercises.last?.id)
+        #expect(model.addSet(toExercise: squat, weightText: "100", repsText: "5") == nil)
+        #expect(model.addSet(toExercise: bench, weightText: "70", repsText: "6") == nil)
+        await gated.fail()
+
+        await #expect(throws: GatedRepository.Boom.self) { try await saving.value }
+        #expect(await gated.stored.isEmpty)
+        #expect(summary(model) == ["卧推:60.0x8,70.0x6", "深蹲:100.0x5"])
+        #expect(model.date == original)
+        #expect(model.isSaving == false)
+    }
+
+    @Test func secondSaveWhileSavingThrowsAndDoesNotWrite() async throws {
+        let gated = GatedRepository()
+        let model = makeModel(repository: gated)
+        let bench = try addExercise("卧推", to: model)
+        #expect(model.addSet(toExercise: bench, weightText: "60", repsText: "8") == nil)
+
+        let saving = Task { try await model.save() }
+        await gated.waitUntilSaveStarted()
+        await #expect(throws: RecordSaveError.saveInProgress) { try await model.save() }
+        #expect(await gated.saveCalls == 1)
+        await gated.release()
+        _ = try await saving.value
+
+        #expect(await gated.stored.count == 1)
     }
 }
