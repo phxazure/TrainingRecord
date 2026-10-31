@@ -15,7 +15,8 @@ struct WeekSummary: Equatable {
         calendar.firstWeekday = 2  // 周一
         let interval = calendar.dateInterval(of: .weekOfYear, for: now)
             ?? DateInterval(start: calendar.startOfDay(for: now), duration: 7 * 24 * 60 * 60)
-        let inWeek = rows.filter { interval.contains($0.date) }
+        // 半开区间 [start, end)：DateInterval.contains 把结束端点也算进去，下周一 00:00 会被误计入本周。
+        let inWeek = rows.filter { interval.start <= $0.date && $0.date < interval.end }
         let weekdays = Set(inWeek.map { weekdayIndex(of: $0.date, calendar: calendar) })
         let lastDay = calendar.date(byAdding: .day, value: -1, to: interval.end) ?? interval.end
         return WeekSummary(

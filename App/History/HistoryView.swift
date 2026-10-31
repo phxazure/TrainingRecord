@@ -61,6 +61,8 @@ struct HistoryView: View {
                     .buttonStyle(ProminentCapsuleButtonStyle())
                     .accessibilityIdentifier(HistoryAccessibilityID.goRecordButton)
             }
+            // 先声明为容器再加 id：否则 id 会下传给子按钮，覆盖 history.goRecordButton。
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier(HistoryAccessibilityID.emptyState)
         } else {
             list
