@@ -13,4 +13,8 @@ enum RecordAccessibilityID {
     static let saveButton = "record.saveButton"
     static let savedToast = "record.savedToast"
     static let retryButton = "record.retryButton"
+    static let recentChip = "record.recentChip"
+    static let recentRow = "record.recentRow"
+    static let copyLastButton = "record.copyLastButton"
+    static let backfillWarning = "record.backfillWarning"
 }

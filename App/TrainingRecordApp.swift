@@ -1,4 +1,3 @@
-import OSLog
 import SwiftUI
 import TrainingRecordCore
 import TrainingRecordPersistence
@@ -6,13 +5,19 @@ import TrainingRecordPersistence
 @main
 struct TrainingRecordApp: App {
     /// 本地存储（失败时退回内存仓储）。整个 App 生命周期只打开一次。
-    private let storage = LaunchStorage.open()
-    /// 动作库业务操作（T009 的界面会用到）。
-    private let libraryService: ExerciseLibraryService
+    private let storage: LaunchStorage
+    @State private var model: AppModel
 
     init() {
-        let storage = storage
-        libraryService = ExerciseLibraryService(library: storage.library, workouts: storage.repository)
+        let storage = LaunchStorage.open()
+        self.storage = storage
+        _model = State(
+            initialValue: AppModel(
+                repository: storage.repository,
+                libraryRepository: storage.library,
+                photos: storage.photos
+            )
+        )
     }
 
     var body: some Scene {
@@ -23,10 +28,11 @@ struct TrainingRecordApp: App {
                 if let warning = storage.warning {
                     StorageWarningBanner(message: warning)
                 }
-                ContentView(repository: storage.repository)
+                ContentView()
             }
-            // 启动时回填一次（数据迁移）：把已有历史里的动作关联到动作库。幂等；失败不影响使用。
-            .task { await LaunchStorage.backfill(libraryService) }
+            .environment(model)
+            // 启动：回填一次（数据迁移，幂等，失败只标记不崩溃），然后加载数据。
+            .task { await model.start() }
         }
     }
 }
@@ -35,6 +41,7 @@ struct TrainingRecordApp: App {
 struct LaunchStorage {
     let repository: any ConditionalSessionUpdating
     let library: any ExerciseLibraryRepository
+    let photos: ExercisePhotoStore
     let warning: String?
 
     static let openFailureMessage = "无法打开本地数据，本次记录不会保存"
@@ -49,11 +56,12 @@ struct LaunchStorage {
     static func open() -> LaunchStorage {
         #if DEBUG
         // 截图用的样例数据启动参数会注入样例（预填草稿的，点保存就会写进仓储）：
-        // 只能用内存仓储，绝不污染真实的本地存储。必须在创建持久容器之前决定。
-        if usesInMemoryStorage(arguments: ProcessInfo.processInfo.arguments) {
+        // 只能用内存仓储，绝不污染真实的本地存储（照片也放临时目录）。必须在创建持久容器之前决定。
+        if DebugLaunch.usesInMemoryStorage(arguments: ProcessInfo.processInfo.arguments) {
             return LaunchStorage(
                 repository: InMemoryWorkoutRepository(),
                 library: InMemoryExerciseLibraryRepository(),
+                photos: .temporary(),
                 warning: nil
             )
         }
@@ -64,19 +72,6 @@ struct LaunchStorage {
             return (store.workouts, store.library)
         }
     }
-
-    #if DEBUG
-    /// 会注入样例数据的 DEBUG 启动参数。新增任何会预填数据 / 草稿的参数，都要加到这里。
-    static let sampleDataArguments: Set<String> = [
-        HistoryDebugLaunch.seedArgument,  // -seedHistorySample：直接写仓储
-        RecordSampleData.launchArgument,  // -seedRecordSample：预填草稿，保存即写仓储
-        "-recordScrollToBottom",  // 预填两个动作的草稿（见 RecordScrollDebug）
-    ]
-
-    static func usesInMemoryStorage(arguments: [String]) -> Bool {
-        !sampleDataArguments.isDisjoint(with: arguments)
-    }
-    #endif
 
     /// 打开失败时不崩溃：退回内存仓储，并带上提示文案。
     static func open(
@@ -90,25 +85,14 @@ struct LaunchStorage {
             }
             #endif
             let (repository, library) = try openOnDisk(url)
-            return LaunchStorage(repository: repository, library: library, warning: nil)
+            return LaunchStorage(repository: repository, library: library, photos: .standard, warning: nil)
         } catch {
             return LaunchStorage(
                 repository: InMemoryWorkoutRepository(),
                 library: InMemoryExerciseLibraryRepository(),
+                photos: .temporary(),
                 warning: openFailureMessage
             )
-        }
-    }
-
-    private static let logger = Logger(subsystem: "com.phx.TrainingRecord", category: "ExerciseLibrary")
-
-    /// 启动时的数据迁移：失败不崩溃、不打扰用户，只记日志（界面提示在 T009）。
-    static func backfill(_ service: ExerciseLibraryService) async {
-        do {
-            let created = try await service.backfill()
-            logger.info("动作库回填完成，新建 \(created) 个条目")
-        } catch {
-            logger.error("动作库回填失败：\(String(describing: error))")
         }
     }
 }

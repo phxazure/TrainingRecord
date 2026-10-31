@@ -4,7 +4,11 @@ import TrainingRecordCore
 /// 「记录」标签：日期、动作卡片列表、添加动作；右上角保存，成功/失败在底部提示条反馈。
 /// 只做展示与绑定，规则全部在 `RecordViewModel`。
 struct RecordView: View {
-    @Bindable var model: RecordViewModel
+    @Environment(AppModel.self) private var app
+
+    private var model: RecordViewModel { app.record }
+    @State private var recents: [ExerciseDefinition] = []
+    @State private var template: SessionTemplate?
 
     @State private var toast: RecordToast?
     /// 每次出示新提示条自增：用于让「2 秒后淡出」只作用于当次提示条。
@@ -13,32 +17,70 @@ struct RecordView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        NavigationStack {
+        @Bindable var app = app
+        @Bindable var model = app.record
+        NavigationStack(path: $app.recordPath) {
             List {
+                if app.library.backfillFailed {
+                    Section {
+                        BackfillWarning()
+                    }
+                }
+
                 Section {
                     DatePicker("日期", selection: $model.date, displayedComponents: .date)
                         .accessibilityIdentifier(RecordAccessibilityID.datePicker)
                 }
 
                 if model.exercises.isEmpty {
-                    Section { EmptyRecordCard() }
+                    Section {
+                        EmptyRecordCard()
+                        if let template {
+                            CopyLastButton(template: template) {
+                                if model.apply(template) { Task { await loadSuggestions() } }
+                            }
+                        }
+                    }
+                }
+
+                if !recents.isEmpty {
+                    Section {
+                        RecentExercisesRow(recents: recents, model: model)
+                    } header: {
+                        Text("最近动作")
+                            .font(.footnote)
+                            .foregroundStyle(.label2)
+                            .textCase(nil)
+                    }
                 }
 
                 ForEach(model.exercises) { exercise in
                     ExerciseCard(model: model, exercise: exercise)
                 }
 
-                AddExerciseSection(model: model)
-                    #if DEBUG
-                    .recordScrollDebugAnchor()
-                    #endif
+                Section {
+                    NavigationLink(value: RecordRoute.picker) {
+                        Label("添加动作", systemImage: "plus.circle.fill")
+                            .font(.headline)
+                            .foregroundStyle(Color.accentColor)
+                            .frame(minHeight: Space.hit, alignment: .leading)
+                    }
+                    .accessibilityIdentifier(RecordAccessibilityID.addExerciseButton)
+                }
+                #if DEBUG
+                .recordScrollDebugAnchor()
+                #endif
             }
             .listStyle(.insetGrouped)
             .scrollDismissesKeyboard(.interactively)
             #if DEBUG
             .modifier(RecordScrollDebug.ScrollToBottomOnLaunch())
             #endif
-            .navigationTitle("记录")
+            .navigationTitle("训练")
+            .navigationDestination(for: RecordRoute.self) { _ in
+                ExercisePickerView()
+            }
+            .exerciseDestinations()
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     SaveButton(isSaving: model.isSaving, canSave: model.canSave, action: save)
@@ -56,6 +98,13 @@ struct RecordView: View {
             )
             .sensoryFeedback(.success, trigger: successCount)
         }
+        // 草稿的动作数变化（添加 / 删除 / 复制）或数据刷新（保存、改名、合并、删除）后，重新取建议。
+        .task(id: "\(app.dataRevision)#\(model.exercises.count)") { await loadSuggestions() }
+    }
+
+    private func loadSuggestions() async {
+        recents = await app.recentExercises(limit: Metrics.recentExerciseLimit)
+        template = await app.lastSessionTemplate()
     }
 
     private func save() {
@@ -65,6 +114,7 @@ struct RecordView: View {
                 successCount += 1
                 let setCount = session.exercises.reduce(0) { $0 + $1.sets.count }
                 show(.saved(setCount: setCount, volume: totalVolume(of: session)), autoDismiss: true)
+                await app.refresh()
             } catch RecordSaveError.saveInProgress {
                 // 已有保存在进行，按钮此时不可点；忽略。
             } catch {
@@ -136,57 +186,77 @@ private struct EmptyRecordCard: View {
     }
 }
 
-/// 添加动作：输入框 + 「添加」。名称为空时按钮禁用且不提示；重名时行内提示。
-private struct AddExerciseSection: View {
-    let model: RecordViewModel
-
-    @State private var name = ""
-    @State private var duplicateName: String?
+/// 复制上次训练（P3）：次要按钮，文案带上日期和动作名。
+private struct CopyLastButton: View {
+    let template: SessionTemplate
+    let action: () -> Void
 
     var body: some View {
-        Section {
+        Button(action: action) {
+            Label(title, systemImage: "doc.on.doc")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(maxWidth: .infinity, minHeight: Space.hit)
+                .background(Color.surface2, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(RecordAccessibilityID.copyLastButton)
+    }
+
+    private var title: String {
+        let date = template.date.formatted(.dateTime.month().day())
+        let names = template.exercises.prefix(3).map(\.name).joined(separator: "、")
+        let more = template.exercises.count > 3 ? "…" : ""
+        return "复制上次训练（\(date) · \(names)\(more)）"
+    }
+}
+
+/// 最近动作胶囊行（P2）：横向滚动；已在本次训练里的置灰。
+private struct RecentExercisesRow: View {
+    let recents: [ExerciseDefinition]
+    let model: RecordViewModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Space.s2) {
-                InputField(
-                    placeholder: "动作名称，如 卧推",
-                    text: $name,
-                    isError: duplicateName != nil,
-                    onSubmit: add,
-                    identifier: RecordAccessibilityID.exerciseNameField
-                )
-                Button("添加", action: add)
-                    .buttonStyle(ProminentCapsuleButtonStyle())
-                    .disabled(trimmedName.isEmpty)
-                    .accessibilityIdentifier(RecordAccessibilityID.addExerciseButton)
+                ForEach(recents) { definition in
+                    let added = model.exercises.contains { model.exerciseID(of: $0.id) == definition.id }
+                    Button {
+                        model.addExercise(definition)
+                    } label: {
+                        Text(definition.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(added ? Color.labelDisabled : Color.accentColor)
+                            .padding(.horizontal, Space.s4)
+                            .frame(minHeight: Space.hit)
+                            .background(Color.surface2, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(added)
+                    .accessibilityIdentifier(RecordAccessibilityID.recentChip)
+                }
             }
-            if let duplicateName {
-                InlineError(message: "本次训练已有「\(duplicateName)」")
-                    .accessibilityIdentifier(RecordAccessibilityID.exerciseNameError)
-            }
-        } header: {
-            Text("添加动作")
-                .font(.footnote)
-                .foregroundStyle(.label2)
-                .textCase(nil)
+            .padding(.vertical, Space.s1)
         }
-        .onChange(of: name) { duplicateName = nil }
+        .listRowInsets(EdgeInsets(top: Space.s1, leading: Space.s4, bottom: Space.s1, trailing: Space.s4))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(RecordAccessibilityID.recentRow)
     }
+}
 
-    private var trimmedName: String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func add() {
-        let candidate = trimmedName
-        guard !candidate.isEmpty else { return }
-        if model.addExercise(name: candidate) {
-            name = ""
-            duplicateName = nil
-        } else {
-            duplicateName = candidate
-        }
+/// 回填（数据迁移）失败：训练页顶部一行提示。
+private struct BackfillWarning: View {
+    var body: some View {
+        Label("动作库整理失败，已有训练不受影响，下次打开会重试。", systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote)
+            .foregroundStyle(.primary)
+            .symbolRenderingMode(.multicolor)
+            .accessibilityIdentifier(RecordAccessibilityID.backfillWarning)
     }
 }
 
 #Preview {
-    RecordView(model: RecordViewModel(repository: InMemoryWorkoutRepository()))
+    RecordView().environment(AppModel.preview())
 }
