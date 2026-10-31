@@ -85,15 +85,20 @@ public final class RecordViewModel {
         linkedExerciseIDs[id] = exerciseID
     }
 
-    /// 把 `source` 的组（原样，含组 id 和顺序）接到 `target` 末尾，再移除 `source`。
-    func moveSets(from source: ExerciseDraft.ID, into target: ExerciseDraft.ID) {
-        guard source != target,
-              let from = exercises.firstIndex(where: { $0.id == source }),
-              let to = exercises.firstIndex(where: { $0.id == target })
+    /// 把两张卡并成一张：保留 `survivor` 的身份（草稿 id），吸收 `victim` 的组。
+    /// 组原样（含组 id、数值），顺序按两张卡原来的先后；合并后的卡片放在两张里靠前的位置。`victim` 被移除。
+    func combine(survivor: ExerciseDraft.ID, absorbing victim: ExerciseDraft.ID) {
+        guard survivor != victim,
+              let survivorIndex = exercises.firstIndex(where: { $0.id == survivor }),
+              let victimIndex = exercises.firstIndex(where: { $0.id == victim })
         else { return }
-        exercises[to].sets += exercises[from].sets
-        exercises.remove(at: from)
-        linkedExerciseIDs[source] = nil
+        var merged = exercises[survivorIndex]
+        merged.sets = victimIndex < survivorIndex
+            ? exercises[victimIndex].sets + exercises[survivorIndex].sets
+            : exercises[survivorIndex].sets + exercises[victimIndex].sets
+        exercises[min(survivorIndex, victimIndex)] = merged
+        exercises.remove(at: max(survivorIndex, victimIndex))
+        linkedExerciseIDs[victim] = nil
     }
 
     /// 删除指定动作（连同它的组）；id 不存在时什么也不做。

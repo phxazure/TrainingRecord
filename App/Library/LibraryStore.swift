@@ -34,6 +34,8 @@ final class LibraryStore {
 
     @ObservationIgnored private let logger = Logger(subsystem: "com.phx.TrainingRecord", category: "ExerciseLibrary")
     @ObservationIgnored private var journal: PhotoRecoveryJournal
+    /// 已经确认成功、但恢复日志里的 createdEntry 记录没能划掉的动作 id（本次运行内）：恢复时只划掉，绝不当成半成品去删。
+    @ObservationIgnored private var settledCreations: Set<UUID> = []
     @ObservationIgnored private var reloadToken = 0
     @ObservationIgnored private var isBusy = false
     @ObservationIgnored private var waiters: [CheckedContinuation<Void, Never>] = []
@@ -150,11 +152,17 @@ final class LibraryStore {
                         try photos.restoreBackup(fileName: fileName)  // 条目更新没成功：备份是唯一的旧图，还原
                     }
                 case .createdEntry(let id):
-                    do {
-                        try await service.delete(id: id)  // 新建失败后没删成的半成品条目
-                    } catch ExerciseLibraryError.notFound {
-                    } catch ExerciseLibraryError.inUse {
+                    // 先核对提交事实再动手：条目还在、没挂照片、也不是本次运行已确认成功的，才是没补偿完的半成品。
+                    // 条目已经挂上照片 = 新建其实成功了，这条记录只是没来得及划掉，只划掉，不删任何数据。
+                    if !settledCreations.contains(id),
+                       let current = try await repository.exercise(id: id), current.photoFileName == nil {
+                        do {
+                            try await service.delete(id: id)
+                        } catch ExerciseLibraryError.notFound {
+                        } catch ExerciseLibraryError.inUse {
+                        }
                     }
+                    settledCreations.remove(id)
                 }
                 try journal.remove(entry)
             } catch {
@@ -172,6 +180,8 @@ final class LibraryStore {
     func add(name: String, bodyPart: String, photoData: Data?) async throws -> ExerciseDefinition {
         try await serialized {
             await recoverPending()
+            // 带照片的新建：先确认恢复日志写得进去，再动手——否则「条目创建了、补偿又失败」时没有任何记录可以补完。
+            if photoData != nil { try journal.requireWritable() }
             let staged = try photoData.map { try photos.stage(imageData: $0) }
             let created: ExerciseDefinition
             do {
@@ -186,14 +196,17 @@ final class LibraryStore {
             }
             let marker = PhotoRecoveryJournal.Entry.createdEntry(id: created.id)
             do {
-                try journal.upsert(marker)  // 先记下「这个条目要是没挂上照片就得删掉」
+                try journal.upsert(marker)  // 先记下「这个条目要是没挂上照片就得删掉」（主存储写不进去时退到备份存储）
                 let installed = try photos.install(staged, exerciseID: created.id)
                 do {
                     let updated = try await service.update(
                         id: created.id, name: created.name, bodyPart: created.bodyPart, photoFileName: installed.fileName
                     )
                     try? photos.finalize(installed)
-                    try? journal.remove(marker)
+                    do { try journal.remove(marker) } catch {
+                        settledCreations.insert(created.id)  // 记录没划掉：恢复时靠核对 + 这个集合避免误删成功的条目
+                        logger.error("新建成功但恢复日志里的记录没能划掉：\(String(describing: error))")
+                    }
                     photoRevision += 1
                     await reload()
                     return updated
@@ -207,8 +220,8 @@ final class LibraryStore {
                     try await service.delete(id: created.id)  // 回滚本次创建
                     try? journal.remove(marker)
                 } catch {
-                    // 日志里留着 marker：下一次操作 / 启动会接着删。
-                    logger.error("新建失败后回滚条目也失败，已记入恢复日志：\(String(describing: error))")
+                    // marker 还在日志里（上面 upsert 成功才会走到这里）：下一次操作 / 启动会接着删。
+                    logger.error("新建失败后回滚条目也失败，恢复日志里留有记录，稍后补删：\(String(describing: error))")
                 }
                 await reload()
                 throw error
@@ -238,7 +251,7 @@ final class LibraryStore {
                 let hasOld = photos.hasPhoto(exerciseID: id)
                 let swapping = PhotoRecoveryJournal.Entry.swap(fileName: finalName, committed: false)
                 if hasOld {
-                    do { try journal.upsert(swapping) } catch {  // 记不下来就不动照片
+                    do { try journal.upsert(swapping, strict: true) } catch {  // 主存储记不下来就不动照片
                         photos.discard(staged)
                         throw error
                     }

@@ -170,21 +170,57 @@ private func setPairs(_ draft: ExerciseDraft) -> [String] {
         #expect(model.exercises.map(\.name) == ["平板卧推", "深蹲"])
     }
 
-    @Test func mergeKeepsSurvivorDraftIdAndAllSetIdsInOrder() {
+    // R3-B1（263d98d）：合并后保留的是**目标**卡的身份（它未提交的输入不受影响），源卡未提交的输入可以丢；
+    // 已录入的组两张卡的都在，数值、组 id 不变，顺序按原来的卡片顺序；合并后的卡片放在两张卡里靠前的位置。
+    @Test func mergeKeepsTargetCardIdentityWhenSourceIsFirst() {
         let (model, _) = makeModel()
         let source = definition("卧推"), target = definition("杠铃卧推")
         model.addExercise(source); model.addExercise(target)
-        addSets(model, to: 0, [("60", "10")])
+        addSets(model, to: 0, [("60", "10"), ("61", "9")])
         addSets(model, to: 1, [("70", "8")])
-        let survivor = model.exercises[0].id
+        let targetCard = model.exercises[1].id
         let allSetIDs = model.exercises.flatMap { $0.sets.map(\.id) }
 
         #expect(model.syncExercises(with: [target], merged: [source.id: target.id]))
 
-        #expect(model.exercises.map(\.id) == [survivor])
-        #expect(model.exercises[0].sets.map(\.id) == allSetIDs)
-        #expect(model.exerciseID(of: survivor) == target.id)
+        #expect(model.exercises.map(\.id) == [targetCard])      // 目标卡的身份（界面上它的未提交输入随之保留）
+        #expect(model.exercises[0].sets.map(\.id) == allSetIDs) // 源卡的组在前，目标卡的组在后
+        #expect(setPairs(model.exercises[0]) == ["60.0x10", "61.0x9", "70.0x8"])
+        #expect(model.exerciseID(of: targetCard) == target.id)
         #expect(model.exercises[0].name == "杠铃卧推")
+    }
+
+    @Test func mergeKeepsTargetCardIdentityWhenTargetIsFirst() {
+        let (model, _) = makeModel()
+        let source = definition("卧推"), target = definition("杠铃卧推")
+        model.addExercise(target); model.addExercise(source)
+        addSets(model, to: 0, [("70", "8")])
+        addSets(model, to: 1, [("60", "10"), ("61", "9")])
+        let targetCard = model.exercises[0].id
+        let allSetIDs = model.exercises.flatMap { $0.sets.map(\.id) }
+
+        #expect(model.syncExercises(with: [target], merged: [source.id: target.id]))
+
+        #expect(model.exercises.map(\.id) == [targetCard])
+        #expect(model.exercises[0].sets.map(\.id) == allSetIDs)
+        #expect(setPairs(model.exercises[0]) == ["70.0x8", "60.0x10", "61.0x9"])
+    }
+
+    @Test func mergedCardTakesTheEarlierPositionAndTargetIdentity() {
+        let (model, _) = makeModel()
+        let source = definition("卧推"), target = definition("杠铃卧推"), other = definition("深蹲")
+        model.addExercise(source); model.addExercise(other); model.addExercise(target)
+        addSets(model, to: 0, [("60", "10")])
+        addSets(model, to: 1, [("100", "5")])
+        addSets(model, to: 2, [("70", "8")])
+        let otherCard = model.exercises[1].id, targetCard = model.exercises[2].id
+
+        #expect(model.syncExercises(with: [target, other], merged: [source.id: target.id]))
+
+        #expect(model.exercises.map(\.id) == [targetCard, otherCard])
+        #expect(model.exercises.map(\.name) == ["杠铃卧推", "深蹲"])
+        #expect(setPairs(model.exercises[0]) == ["60.0x10", "70.0x8"])
+        #expect(setPairs(model.exercises[1]) == ["100.0x5"])
     }
 
     @Test func unlinkedDeletedKeepsDraftAndSetIds() {
@@ -223,19 +259,20 @@ private func setPairs(_ draft: ExerciseDraft) -> [String] {
         #expect(setPairs(model.exercises[0]) == ["60.0x10", "61.0x9", "62.0x8", "70.0x7", "71.0x6"])
     }
 
-    @Test func freeExerciseFirstThenRenamedLinkedOneWithSameNameAdoptsTheLink() {
+    @Test func freeExerciseFirstThenRenamedLinkedOneWithSameNameKeepsTheLinkedCard() {
         let (model, _) = makeModel()
         let bench = definition("卧推")
         model.addExercise(name: "平板卧推")      // 自由输入在前
         model.addExercise(bench)                // 关联的在后
         addSets(model, to: 0, [("70", "8")])
         addSets(model, to: 1, [("60", "10")])
-        let firstID = model.exercises[0].id
+        let linkedCard = model.exercises[1].id
 
         #expect(model.syncExercises(with: [definition("平板卧推", id: bench.id)]))
 
-        #expect(model.exercises.map(\.id) == [firstID])
-        #expect(model.exerciseID(of: firstID) == bench.id)
+        // 带关联的那张卡保留身份（它的未提交输入不丢）；自由输入的组在前、关联卡的组在后。
+        #expect(model.exercises.map(\.id) == [linkedCard])
+        #expect(model.exerciseID(of: linkedCard) == bench.id)
         #expect(setPairs(model.exercises[0]) == ["70.0x8", "60.0x10"])
     }
 
