@@ -1,126 +1,270 @@
 import SwiftUI
 import TrainingRecordCore
 
-/// 「历史」标签：列表 / 趋势 两个子页。每次切到本标签都由 ContentView 触发重新加载，
-/// 保证刚在「记录」保存的训练能看到。
+/// 「历史」标签：本周汇总 + 按月分组的训练列表；点行进明细，左滑删除。
+/// 每次切到本标签都由 ContentView 触发重新加载，保证刚在「记录」保存的训练能看到。
 struct HistoryView: View {
     let model: HistoryViewModel
+    /// 空状态的「去记录」：切到记录标签。
+    let goToRecord: () -> Void
+    /// 明细里的「查看趋势」：切到趋势标签并选中该动作。
+    let openTrend: (String) -> Void
 
-    @State private var selection: HistoryTab = HistoryView.initialSelection
     @State private var path = NavigationPath()
+    @State private var hasLoaded = false
+    @State private var lastAction: Action = .load
+    #if DEBUG
+    @State private var openedFirstForDebug = false
+    #endif
+
+    private enum Action { case load, delete }
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                switch selection {
-                case .list:
-                    listView
-                case .trend:
-                    TrendView(model: model)
-                }
-            }
-            .navigationTitle("历史")
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Picker("视图", selection: $selection) {
-                        ForEach(HistoryTab.allCases) { tab in
-                            Text(tab.rawValue).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                }
-            }
-            .safeAreaInset(edge: .top) {
-                if let message = model.errorMessage {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .padding(.vertical, 6)
-                        .accessibilityIdentifier(HistoryAccessibilityID.errorMessage)
-                }
-            }
-            .navigationDestination(for: UUID.self) { sessionID in
-                if let session = model.sessions.first(where: { $0.id == sessionID }) {
-                    HistoryDetailView(session: session)
-                }
-            }
-        }
-        .task {
-            await model.reload()
-            #if DEBUG
-            if HistoryDebugLaunch.opensFirstSession, let first = model.rows.first {
-                path.append(first.id)
-            }
-            #endif
-        }
-    }
-
-    private var listView: some View {
-        Group {
-            if model.rows.isEmpty {
-                ContentUnavailableView(
-                    "还没有训练",
-                    systemImage: "figure.strengthtraining.traditional",
-                    description: Text("在「记录」里保存一次训练后，会出现在这里。")
-                )
-                .accessibilityIdentifier(HistoryAccessibilityID.emptyState)
-            } else {
-                List {
-                    ForEach(model.rows) { row in
-                        NavigationLink(value: row.id) {
-                            HistoryRowView(row: row)
-                        }
-                        .accessibilityIdentifier(HistoryAccessibilityID.row)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                Task { await model.delete(id: row.id) }
-                            } label: {
-                                Label("删除", systemImage: "trash")
-                            }
-                            .accessibilityIdentifier(HistoryAccessibilityID.deleteButton)
-                        }
+            content
+                .navigationTitle("历史")
+                .navigationDestination(for: UUID.self) { sessionID in
+                    if let session = model.sessions.first(where: { $0.id == sessionID }) {
+                        HistoryDetailView(session: session, openTrend: openTrend)
                     }
                 }
-                .listStyle(.insetGrouped)
-                .accessibilityIdentifier(HistoryAccessibilityID.list)
-            }
         }
-    }
-
-    private static var initialSelection: HistoryTab {
+        .task { await reload() }
         #if DEBUG
-        HistoryDebugLaunch.initialSubtab ?? .list
-        #else
-        .list
+        // 截图辅助：`-historyOpenFirst` 在第一批数据出现后打开最近一场的明细（只打开一次）。
+        .onChange(of: model.rows.first?.id) { _, firstID in
+            if HistoryDebugLaunch.opensFirstSession, !openedFirstForDebug, let firstID {
+                openedFirstForDebug = true
+                path.append(firstID)
+            }
+        }
         #endif
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !hasLoaded && model.rows.isEmpty {
+            // 首次加载且没有旧数据；之后的刷新静默进行。
+            ProgressView {
+                Text("正在加载…")
+                    .font(.subheadline)
+                    .foregroundStyle(.label2)
+            }
+            .accessibilityIdentifier(HistoryAccessibilityID.loading)
+        } else if model.rows.isEmpty && model.errorMessage == nil {
+            ContentUnavailableView {
+                Label("还没有训练记录", systemImage: "clock.arrow.circlepath")
+            } description: {
+                Text("在「记录」里保存一次训练，就会出现在这里。")
+            } actions: {
+                Button("去记录", action: goToRecord)
+                    .buttonStyle(ProminentCapsuleButtonStyle())
+                    .accessibilityIdentifier(HistoryAccessibilityID.goRecordButton)
+            }
+            .accessibilityIdentifier(HistoryAccessibilityID.emptyState)
+        } else {
+            list
+        }
+    }
+
+    private var list: some View {
+        List {
+            if model.errorMessage != nil {
+                Section { errorCard }
+            }
+            if !model.rows.isEmpty {
+                WeekSummaryCard(summary: WeekSummary.make(rows: model.rows, now: .now))
+                ForEach(MonthGroup.group(model.rows)) { group in
+                    Section {
+                        ForEach(group.rows) { row in
+                            NavigationLink(value: row.id) {
+                                HistoryRowView(row: row)
+                            }
+                            .accessibilityIdentifier(HistoryAccessibilityID.row)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    Task { await delete(row.id) }
+                                } label: {
+                                    Label("删除", systemImage: "trash")
+                                }
+                                .tint(.danger)
+                                .foregroundStyle(.onDanger)
+                                .accessibilityIdentifier(HistoryAccessibilityID.deleteButton)
+                            }
+                        }
+                    } header: {
+                        Text(monthTitle(for: group.firstDate))
+                            .font(.footnote)
+                            .foregroundStyle(.label2)
+                            .textCase(nil)
+                    }
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .accessibilityIdentifier(HistoryAccessibilityID.list)
+        .refreshable { await reload() }
+    }
+
+    /// 列表顶部错误卡片（§8.8）：加载失败保留上次结果并可重试；删除失败说明训练还在。
+    private var errorCard: some View {
+        HStack(alignment: .top, spacing: Space.s3) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.danger)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Space.s1) {
+                switch lastAction {
+                case .load:
+                    Text("无法加载训练历史").font(.headline)
+                    Text("下面是上次加载的结果。")
+                        .font(.subheadline)
+                        .foregroundStyle(.label2)
+                case .delete:
+                    Text("删除失败，这次训练还在。").font(.headline)
+                }
+            }
+            Spacer(minLength: Space.s2)
+            if lastAction == .load {
+                Button("重试") { Task { await reload() } }
+                    .font(.headline)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(minHeight: Space.hit)
+                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(HistoryAccessibilityID.retryButton)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(HistoryAccessibilityID.errorMessage)
+    }
+
+    private func reload() async {
+        lastAction = .load
+        await model.reload()
+        hasLoaded = true
+    }
+
+    private func delete(_ id: UUID) async {
+        await model.delete(id: id)
+        if model.errorMessage != nil { lastAction = .delete }
+    }
+
+    /// 「10月」；不是今年时带年份「2025年10月」。
+    private func monthTitle(for date: Date) -> String {
+        let sameYear = Calendar.current.isDate(date, equalTo: .now, toGranularity: .year)
+        return sameYear
+            ? date.formatted(.dateTime.month())
+            : date.formatted(.dateTime.year().month())
     }
 }
 
-/// 历史列表的一行：日期 + 动作名摘要 + 组数与总容量。
-private struct HistoryRowView: View {
-    let row: HistoryRow
+/// 本周汇总卡片：训练次数、容量（metric-volume）、哪几天练过（周一起）。
+private struct WeekSummaryCard: View {
+    let summary: WeekSummary
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private static let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(row.date, format: .dateTime.year().month().day())
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .accessibilityIdentifier(HistoryAccessibilityID.rowDate)
-            Text(row.exerciseNames.joined(separator: "、"))
-                .font(.body)
-                .accessibilityIdentifier(HistoryAccessibilityID.rowSummary)
-            Text("\(row.setCount) 组 · \(row.totalVolume.formatted(.number.precision(.fractionLength(0...1)))) kg")
+        Section {
+            VStack(alignment: .leading, spacing: Space.s3) {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: Space.s3))
+                    : AnyLayout(HStackLayout(alignment: .top, spacing: Space.s4))
+                layout {
+                    stat("训练") {
+                        ValueWithUnit(
+                            value: "\(summary.sessionCount)",
+                            unit: "次",
+                            style: .title2,
+                            weight: .bold
+                        )
+                    }
+                    stat("容量") {
+                        ValueWithUnit(
+                            value: Format.volume(summary.volume),
+                            unit: "kg",
+                            style: .title2,
+                            weight: .bold,
+                            valueColor: .metricVolume
+                        )
+                    }
+                }
+                Divider()
+                weekdayDots
+            }
+            .padding(.vertical, Space.s1)
+            .accessibilityIdentifier(HistoryAccessibilityID.weekSummary)
+        } header: {
+            Text("本周 · \(summary.startDate.formatted(.dateTime.month().day()))–\(summary.endDate.formatted(.dateTime.month().day()))")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.label2)
+                .textCase(nil)
+        }
+    }
+
+    private func stat<Value: View>(_ title: String, @ViewBuilder value: () -> Value) -> some View {
+        VStack(alignment: .leading, spacing: Space.s1) {
+            Text(title)
+                .font(.footnote)
+                .foregroundStyle(.label2)
+            value()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var weekdayDots: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<7, id: \.self) { index in
+                let active = summary.activeWeekdays.contains(index)
+                VStack(spacing: Space.s1) {
+                    Circle()
+                        .fill(active ? Color.accentColor : Color.surface2)
+                        .frame(width: Space.s6, height: Space.s6)
+                    Text(Self.weekdayLabels[index])
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.label2)
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("周\(Self.weekdayLabels[index])")
+                .accessibilityValue(active ? "练过" : "没练")
+            }
+        }
+    }
+}
+
+/// 历史列表的一行（§8.5）：日期块 ｜ 动作名 + 组数 ｜ 容量（metric-volume）。
+private struct HistoryRowView: View {
+    let row: HistoryRow
+    @ScaledMetric(relativeTo: .title2) private var dateColumnWidth: CGFloat = 40
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        HStack(spacing: Space.s3) {
+            VStack(spacing: 0) {
+                // 只要数字：`.dateTime.day()` 在中文环境会带「日」字。
+                Text("\(Calendar.current.component(.day, from: row.date))")
+                    .numeric(.title2, weight: .bold)
+                Text(row.date, format: .dateTime.weekday(.abbreviated))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.label2)
+            }
+            .frame(width: dateColumnWidth)
+            .accessibilityIdentifier(HistoryAccessibilityID.rowDate)
+
+            VStack(alignment: .leading, spacing: Space.s1) {
+                Text(row.exerciseNames.joined(separator: "、"))
+                    .font(.headline)
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    .accessibilityIdentifier(HistoryAccessibilityID.rowSummary)
+                Text("\(row.setCount) 组")
+                    .font(.subheadline)
+                    .foregroundStyle(.label2)
+            }
+            Spacer(minLength: Space.s2)
+            ValueWithUnit(value: Format.volume(row.totalVolume), unit: "kg", valueColor: .metricVolume)
                 .accessibilityIdentifier(HistoryAccessibilityID.rowStats)
         }
     }
-}
-
-/// 历史子页：列表 / 趋势。
-enum HistoryTab: String, CaseIterable, Identifiable {
-    case list = "列表"
-    case trend = "趋势"
-    var id: String { rawValue }
 }
