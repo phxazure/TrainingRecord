@@ -1,6 +1,6 @@
 # TrainingRecord 设计规范 v1 —— 方向 B「健身」式
 
-状态：待人类批准（未批准前 code / code-local 不得据此实现）
+状态：已批准（2026-11-01 人类按 T007 实现效果确认采用）。§9 P1–P3 仍未批准
 设计稿：`ui/index.html`（浏览器直接打开；右上角切换深色 / 浅色）
 截图：`ui/screenshots/`
 

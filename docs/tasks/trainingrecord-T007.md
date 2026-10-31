@@ -1,6 +1,6 @@
 # trainingrecord-T007 按 UI 设计 v1 实现界面（供人类试用后决定）
 
-状态: planned
+状态: approved（2026-11-01 人类看截图后确认 UI 没问题，批准采用）
 分支: task/trainingrecord-T007（基于 task/trainingrecord-T006 审查交付的 1527f15，并已带上 frontend 的设计稿提交）
 执行者: code
 里程碑: 不进 m2-app。人类说「要做出来才能决定」：本单做出真实界面给人类试用；人类批准后再单独开 PR，不批准则整个分支不合并
@@ -56,6 +56,8 @@ DESIGN.md 当前写着「待人类批准、未批准前不得据此实现」。�
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 通过（2 SHOULD-FIX） | 83 tests、9 色 Any/Dark 全符、隔离 XCUITest 8 项；WeekSummary 把下周一 00:00 计入本周；history.goRecordButton 在 AX 树中不存在 | 2026-11-01 |
+| 2 | 通过 | 11c3983 普通 merge 带入 T006 修复 bd79293；cc00328 半开区间 + AX 容器修正；旧版/变异红、新版 9/9 绿 | 2026-11-01 |
 
 ## 升级说明
 
