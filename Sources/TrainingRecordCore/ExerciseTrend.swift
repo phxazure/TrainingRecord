@@ -39,8 +39,8 @@ public func trend(for exerciseName: String, in sessions: [WorkoutSession]) -> [E
             .flatMap(\.sets)
         guard !matchedSets.isEmpty else { continue }
         let bestE1RM = roundToTenth(matchedSets.compactMap(e1RM(of:)).max() ?? 0)
-        let volume = matchedSets.reduce(0) { $0 + volume(of: $1) }
-        let point = ExerciseTrendPoint(date: session.date, bestE1RM: bestE1RM, volume: volume)
+        let sessionVolume = matchedSets.reduce(0) { $0 + volume(of: $1) }
+        let point = ExerciseTrendPoint(date: session.date, bestE1RM: bestE1RM, volume: sessionVolume)
         entries.append((session, point))
     }
     entries.sort { a, b in
