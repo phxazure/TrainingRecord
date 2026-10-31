@@ -41,11 +41,11 @@ import Testing
         SetEntry(weight: 0, reps: 10),   // 0
     ].compactMap { $0 }
     #expect(sets.count == 3)
-    let session = WorkoutSession(date: Date(timeIntervalSinceReferenceDate: 0), sets: sets)
+    let session = WorkoutSession(date: Date(timeIntervalSinceReferenceDate: 0), exercises: [ExerciseEntry(name: "卧推", sets: sets)!])
     #expect(totalVolume(of: session) == 510)
 }
 
 @Test func totalVolumeOfEmptySessionIsZero() {
-    let session = WorkoutSession(date: Date(timeIntervalSinceReferenceDate: 0), sets: [])
+    let session = WorkoutSession(date: Date(timeIntervalSinceReferenceDate: 0), exercises: [])
     #expect(totalVolume(of: session) == 0)
 }
