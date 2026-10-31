@@ -8,7 +8,7 @@
 范围:
   - App/（全部视图文件，可新建、改名、删除；App/TrainingRecordApp.swift 可改）
   - App/Assets.xcassets/（仅限新增界面需要的资源；已有 9 个颜色数值不改）
-  - Sources/TrainingRecordCore/（只新增文件；另可修改 WorkoutDraft.swift，仅限给 ExerciseDraft 加 exerciseID）
+  - Sources/TrainingRecordCore/（只新增文件；另可修改 WorkoutDraft.swift，仅限给 ExerciseDraft 加 exerciseID；R2 追加：可修改 RecordViewModel.swift、WorkoutDraft.swift，仅限为「库变更同步草稿时原样保留已录入的组（数值、顺序、id）」提供就地更新动作名/动作 id 的能力，原有公共 API 与行为不变）
   - Tests/TrainingRecordCoreTests/（只新增文件）
   - docs/screenshots/trainingrecord-T009-*.png（新建）
   - 只读参考：ui/DESIGN.md（颜色、字号、间距、圆角、状态的 token 继续以它为准）
@@ -73,6 +73,7 @@ App：
       「把「源动作」的 N 次训练记录并入「目标动作」，之后「源动作」会从动作库删除。适用于同一个动作被记成了两个名字。此操作不能撤销。」
       （N = 源动作出现的训练场次数）。按钮「合并」（破坏性样式）/「取消」
 - [ ] **删除动作**：没有记录时确认后删除；有记录时不允许删除，提示「「X」有 N 次训练记录，不能直接删除。如果它和另一个动作是同一个，可以用「合并记录」。」
+- [ ] **草稿同步保真（R2 追加，hermes 2026-11-01）**：库的改名/合并同步到草稿时，已录入组的重量、次数、顺序必须逐值不变（不得经格式化字符串重建，例如 %.12f）；用 review 的边界值 [4e-13, 62.12345678901234, 999.9999999999999] 写测试，先红后绿
 - [ ] **删除动作（R1 后 hermes 裁定，2026-11-01）**：该动作正在当前训练草稿里时，即使没有历史记录也不允许删除，提示先把它从本次训练移除（提示须清楚说明原因与操作）；不得为删除而静默移除草稿中的动作及其已录入的组。理由：避免保存悬空 id，也避免用户正在录的组被悄悄丢掉
 - [ ] 改名/合并/删除后，历史、趋势、训练页的数据立即反映（返回或切标签后重新加载即可）
 - [ ] 训练页：不显示上次成绩；「最近动作」与「复制上次训练」按上图，数据来自 T008 的 `recentExercises` / `lastSessionTemplate`；`lastSessionTemplate` 为 nil 时不显示该按钮
