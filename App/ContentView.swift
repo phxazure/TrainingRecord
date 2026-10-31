@@ -48,9 +48,6 @@ struct ContentView: View {
             }
         }
         #endif
-        // 界面文案只有中文；App 包尚未声明 zh-Hans 本地化（开发区域为 en），
-        // 不显式指定时日期等系统格式会按英文显示，与中文界面不一致。
-        .environment(\.locale, Locale(identifier: "zh-Hans"))
     }
 }
 
