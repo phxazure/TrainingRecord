@@ -10,13 +10,19 @@ public protocol ConditionalSessionUpdating: WorkoutRepository {
     /// 原子地更新一场已存在的训练：读取 → `transform` → 覆盖写回，整个过程不会被该仓储的其他操作打断。
     /// 场次不存在时返回 false 且**不写入、不创建**；`transform` 返回 nil 表示无需改动，也返回 false。
     /// 写入了返回 true。`transform` 必须是纯函数（在仓储内部同步执行）。
+    ///
+    /// **`transform` 返回的场次 id 必须等于 `id`**（本方法只更新这一场，不能改 id、不能借此创建或覆盖别的场次）。
+    /// id 不同时视为无效更新：返回 false，**不改动任何数据**（原场次保持原样，也不会出现新 id，
+    /// 更不会覆盖另一条已存在的记录）。所有实现行为一致。
     func updateExisting(id: UUID, _ transform: @Sendable (WorkoutSession) -> WorkoutSession?) async throws -> Bool
 }
 
 extension InMemoryWorkoutRepository: ConditionalSessionUpdating {
     /// actor 内部的 `session(id:)` 与 `save` 都不挂起，所以整个「读 → 变换 → 写」在 actor 上不可被打断。
     public func updateExisting(id: UUID, _ transform: @Sendable (WorkoutSession) -> WorkoutSession?) async throws -> Bool {
-        guard let current = try await session(id: id), let updated = transform(current) else { return false }
+        guard let current = try await session(id: id), let updated = transform(current), updated.id == id else {
+            return false
+        }
         try await save(updated)
         return true
     }

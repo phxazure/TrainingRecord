@@ -61,7 +61,8 @@ public actor SwiftDataWorkoutRepository: ConditionalSessionUpdating {
     public func updateExisting(id: UUID, _ transform: @Sendable (WorkoutSession) -> WorkoutSession?) async throws -> Bool {
         do {
             guard let record = try records(id: id).first else { return false }
-            guard let updated = transform(try Self.makeSession(from: record)) else { return false }
+            // transform 返回的 id 必须等于 id：否则拒绝，不改动任何数据（见协议文档）。
+            guard let updated = transform(try Self.makeSession(from: record)), updated.id == id else { return false }
             for existing in try records(id: id) {
                 modelContext.delete(existing)
             }
