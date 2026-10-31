@@ -108,9 +108,9 @@ public enum TrainingRecordStore {
 上次成绩 / 最近动作 / 复制上次训练：
 - [ ] `lastPerformance(exerciseID:before:)`：在 `date < before`（before 为 nil 表示不限）的场次里，取包含该动作的**最近**一场，返回该场此动作的最佳组（重量最大；同重量取次数多的）；没有则 nil
 - [ ] `recentExercises(limit:)`：按最近一次使用的场次日期降序、去重，最多 limit 个；只返回动作库里仍存在的条目
-- [ ] `lastSessionTemplate()`：最近一场训练的动作（按原顺序，映射为动作库条目，跳过已不存在的），没有训练时 nil
+- [ ] `lastSessionTemplate()`：最近一场训练的动作（按原顺序，映射为动作库条目，跳过已不存在的）；没有训练时 nil；**映射后一个动作都没有时也返回 nil**（hermes R1 裁定，2026-11-01）
 - [ ] `RecordViewModel.addExercise(_ definition:)`：草稿记录 exerciseID；保存后的 session 条目带上 id；与已有草稿同 id 或同名时返回 false
-- [ ] `RecordViewModel.apply(_ template:)`：只在草稿为空时生效（返回 true），带入动作名和 id，不带入组；草稿非空返回 false 且不改动
+- [ ] `RecordViewModel.apply(_ template:)`：只在草稿为空且模板至少有一个动作时生效（返回 true），带入动作名和 id，不带入组；草稿非空或模板为空时返回 false 且不改动（空模板部分为 hermes R1 裁定，2026-11-01）
 
 持久化：
 - [ ] `SwiftDataExerciseLibraryRepository` 行为与内存实现一致（建议共享用例，内存/磁盘参数化）
