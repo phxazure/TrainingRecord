@@ -76,6 +76,62 @@ private actor ScriptedRepository: WorkoutRepository {
     }
 }
 
+/// 可挂起读取的假仓储：`suspendNextRead()` 后的下一次 `allSessions()` 先按当时状态取快照，
+/// 再挂起直到 `resumeRead()`，用来复现「reload 拿到旧快照 → 其间发生别的操作 → 旧快照才返回」。
+private actor SuspendableRepository: WorkoutRepository {
+    private var stored: [UUID: WorkoutSession]
+    private var suspendNext = false
+    private var parkedRead: CheckedContinuation<Void, Never>?
+    private var readParkedWaiter: CheckedContinuation<Void, Never>?
+
+    init(sessions: [WorkoutSession]) {
+        stored = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+    }
+
+    func suspendNextRead() {
+        suspendNext = true
+    }
+
+    /// 等到被挂起的那次读取已经取好快照并挂起。
+    func waitUntilReadParked() async {
+        if parkedRead != nil { return }
+        await withCheckedContinuation { readParkedWaiter = $0 }
+    }
+
+    func resumeRead() {
+        parkedRead?.resume()
+        parkedRead = nil
+    }
+
+    func save(_ session: WorkoutSession) async throws {
+        stored[session.id] = session
+    }
+
+    func session(id: UUID) async throws -> WorkoutSession? {
+        stored[id]
+    }
+
+    func allSessions() async throws -> [WorkoutSession] {
+        let snapshot = stored.values.sorted { a, b in
+            if a.date != b.date { return a.date > b.date }
+            return a.id.uuidString < b.id.uuidString
+        }
+        if suspendNext {
+            suspendNext = false
+            await withCheckedContinuation { continuation in
+                parkedRead = continuation
+                readParkedWaiter?.resume()
+                readParkedWaiter = nil
+            }
+        }
+        return snapshot
+    }
+
+    func delete(id: UUID) async throws {
+        stored[id] = nil
+    }
+}
+
 // MARK: - 测试
 
 @MainActor
@@ -205,5 +261,53 @@ private actor ScriptedRepository: WorkoutRepository {
 
         #expect(model.errorMessage == nil)
         #expect(model.sessions == lastGood)
+    }
+
+    // MARK: reload 与 delete 交错（回归：旧快照不得覆盖已成功的删除）
+
+    @Test func staleReloadDoesNotResurrectDeletedSession() async throws {
+        let repo = SuspendableRepository(sessions: [s1, s2, s3])
+        let model = makeModel(repository: repo)
+        await model.reload()
+        #expect(model.sessions.map(\.id) == [s3ID, s2ID, s1ID])
+
+        // reload 取到含 s2 的旧快照后挂起
+        await repo.suspendNextRead()
+        let staleReload = Task { await model.reload() }
+        await repo.waitUntilReadParked()
+
+        // 其间删除成功
+        await model.delete(id: s2ID)
+        #expect(try await repo.session(id: s2ID) == nil)
+        #expect(model.sessions.map(\.id) == [s3ID, s1ID])
+
+        // 释放旧 reload：s2 不应被写回
+        await repo.resumeRead()
+        await staleReload.value
+
+        #expect(try await repo.session(id: s2ID) == nil)
+        #expect(model.sessions.map(\.id) == [s3ID, s1ID])
+        #expect(model.errorMessage == nil)
+    }
+
+    @Test func olderReloadFinishingLastDoesNotOverwriteNewerReload() async throws {
+        let repo = SuspendableRepository(sessions: [s1, s2])
+        let model = makeModel(repository: repo)
+
+        // 较早的 reload 取到只含 s1、s2 的快照后挂起
+        await repo.suspendNextRead()
+        let olderReload = Task { await model.reload() }
+        await repo.waitUntilReadParked()
+
+        // 其间新保存 s3，较新的 reload 完成
+        try await repo.save(s3)
+        await model.reload()
+        #expect(model.sessions.map(\.id) == [s3ID, s2ID, s1ID])
+
+        // 较早的 reload 最后返回：不应覆盖较新的结果
+        await repo.resumeRead()
+        await olderReload.value
+
+        #expect(model.sessions.map(\.id) == [s3ID, s2ID, s1ID])
     }
 }

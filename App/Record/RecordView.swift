@@ -12,53 +12,46 @@ struct RecordView: View {
     @State private var showSavedToast = false
     @State private var saveCount = 0
 
-    private static let addExerciseSectionID = "addExerciseSection"
-
     var body: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                Form {
+            Form {
+                Section {
+                    DatePicker("日期", selection: $model.date, displayedComponents: .date)
+                        .accessibilityIdentifier(RecordAccessibilityID.datePicker)
+                }
+
+                if model.exercises.isEmpty {
                     Section {
-                        DatePicker("日期", selection: $model.date, displayedComponents: .date)
-                            .accessibilityIdentifier(RecordAccessibilityID.datePicker)
-                    }
-
-                    if model.exercises.isEmpty {
-                        Section {
-                            ContentUnavailableView {
-                                Label("还没有动作", systemImage: "dumbbell")
-                            } description: {
-                                Text("在下方添加一个动作，再为它记录每组的重量和次数。")
-                            }
-                        }
-                    }
-
-                    ForEach(model.exercises) { exercise in
-                        ExerciseSection(model: model, exercise: exercise)
-                    }
-
-                    addExerciseSection
-                        .id(Self.addExerciseSectionID)
-
-                    if saveFailed {
-                        Section {
-                            Label("保存失败，请重试", systemImage: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.red)
+                        ContentUnavailableView {
+                            Label("还没有动作", systemImage: "dumbbell")
+                        } description: {
+                            Text("在下方添加一个动作，再为它记录每组的重量和次数。")
                         }
                     }
                 }
-                .scrollDismissesKeyboard(.interactively)
-                // 底部悬浮标签栏会贴住/压住最后一个输入区：在安全区之外再留系统默认间距。
-                .safeAreaPadding(.bottom)
-                #if DEBUG
-                // 仅 DEBUG：截图用启动参数 `-recordScrollToBottom` 让页面启动后滚到底部。
-                .task {
-                    guard ProcessInfo.processInfo.arguments.contains("-recordScrollToBottom") else { return }
-                    try? await Task.sleep(for: .milliseconds(500))
-                    proxy.scrollTo(Self.addExerciseSectionID, anchor: .bottom)
+
+                ForEach(model.exercises) { exercise in
+                    ExerciseSection(model: model, exercise: exercise)
                 }
-                #endif
+
+                addExerciseSection
+                    #if DEBUG
+                    .recordScrollDebugAnchor()
+                    #endif
+
+                if saveFailed {
+                    Section {
+                        Label("保存失败，请重试", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
             }
+            .scrollDismissesKeyboard(.interactively)
+            // 底部悬浮标签栏会贴住/压住最后一个输入区：在安全区之外再留系统默认间距。
+            .safeAreaPadding(.bottom)
+            #if DEBUG
+            .modifier(RecordScrollDebug.ScrollToBottomOnLaunch())
+            #endif
             .disabled(model.isSaving)
             .navigationTitle("记录训练")
             .toolbar {
@@ -149,3 +142,41 @@ private struct SavedToast: View {
 #Preview {
     RecordView(model: RecordViewModel(repository: InMemoryWorkoutRepository()))
 }
+
+#if DEBUG
+/// 仅 DEBUG、且仅带启动参数 `-recordScrollToBottom` 时生效的截图辅助：启动后把「记录」页
+/// 滚到最后一个输入区，用于截图验证它不被底部标签栏遮挡（草稿样例由 ContentView 的同名参数预填）。
+/// 不带参数时不加 `.id`、不包 `ScrollViewReader`，视图与 T004 一致；Release 不参与编译。
+private enum RecordScrollDebug {
+    static let launchArgument = "-recordScrollToBottom"
+    static let anchorID = "recordScrollDebug.addExerciseSection"
+
+    static var isRequested: Bool { ProcessInfo.processInfo.arguments.contains(launchArgument) }
+
+    struct ScrollToBottomOnLaunch: ViewModifier {
+        func body(content: Content) -> some View {
+            if RecordScrollDebug.isRequested {
+                ScrollViewReader { proxy in
+                    content.task {
+                        try? await Task.sleep(for: .milliseconds(500))
+                        proxy.scrollTo(RecordScrollDebug.anchorID, anchor: .bottom)
+                    }
+                }
+            } else {
+                content
+            }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func recordScrollDebugAnchor() -> some View {
+        if RecordScrollDebug.isRequested {
+            id(RecordScrollDebug.anchorID)
+        } else {
+            self
+        }
+    }
+}
+#endif

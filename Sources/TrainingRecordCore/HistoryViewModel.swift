@@ -74,20 +74,40 @@ public final class HistoryViewModel {
             .map(\.display)
     }
 
+    // MARK: 并发协调
+    // @MainActor 不阻止 await 期间的重入：reload 可能在拿到旧快照后、写回前，
+    // 有 delete 或更新的 reload 先完成。协调策略：
+    //   1. 加载代次号：每次 reload 领一个代次，返回时若已有更新的 reload 发起，丢弃本次结果（含失败）。
+    //   2. 删除日志：delete 成功后记下 id；最新那次 reload 写回时，过滤掉它发起之后才成功删除的 id，
+    //      既不让已删除的记录复活，也不丢掉这次加载里的新数据。
+    @ObservationIgnored private var loadGeneration = 0
+    @ObservationIgnored private var deletedIDs: [UUID] = []
+
     /// 从仓储重新加载全部场次（日期降序）。失败时保留上一次成功值并记录错误。
+    /// 过期的加载结果（期间又发起了更新的 reload）被丢弃；加载期间成功删除的记录不会被写回。
     public func reload() async {
+        loadGeneration += 1
+        let generation = loadGeneration
+        let deletionMark = deletedIDs.count
         do {
-            sessions = try await repository.allSessions()
+            let loaded = try await repository.allSessions()
+            guard generation == loadGeneration else { return }
+            let deletedSinceStart = Set(deletedIDs[deletionMark...])
+            sessions = loaded.filter { !deletedSinceStart.contains($0.id) }
             errorMessage = nil
         } catch {
+            guard generation == loadGeneration else { return }
             errorMessage = "加载训练历史失败，请稍后重试"
         }
+        // 只有最新一次 reload 会读删除日志，它结束后日志不再需要。
+        deletedIDs.removeAll()
     }
 
     /// 按 id 删除一场训练。失败时保留 sessions 并记录错误。
     public func delete(id: UUID) async {
         do {
             try await repository.delete(id: id)
+            deletedIDs.append(id)
             sessions.removeAll { $0.id == id }
             errorMessage = nil
         } catch {
