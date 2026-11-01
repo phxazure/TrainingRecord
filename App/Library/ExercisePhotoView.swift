@@ -28,8 +28,8 @@ struct ExercisePhotoView: View {
         }
         .frame(width: size * clampedScale, height: size * clampedScale)
         .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
-        // 文件名不变时（换照片覆盖同名文件）靠 photoRevision 触发重新读取。
-        .task(id: "\(fileName ?? "")#\(app.library.photoRevision)") {
+        // 每次存图都是新文件名，所以文件名变了就重新读。
+        .task(id: fileName) {
             guard let fileName else {
                 image = nil
                 return

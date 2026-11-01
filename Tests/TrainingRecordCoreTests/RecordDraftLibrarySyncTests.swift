@@ -206,6 +206,33 @@ private func setPairs(_ draft: ExerciseDraft) -> [String] {
         #expect(setPairs(model.exercises[0]) == ["70.0x8", "60.0x10", "61.0x9"])
     }
 
+    // R4-S1：被吸收那张卡（victim）的关联必须清掉——用公开 API `exerciseID(of:)` 查旧草稿 id 应得 nil（文档承诺：id 不存在 → nil）。
+    @Test func absorbedCardLinkIsClearedWhenSourceIsFirst() {
+        let (model, _) = makeModel()
+        let source = definition("卧推"), target = definition("杠铃卧推")
+        model.addExercise(source); model.addExercise(target)
+        let sourceCard = model.exercises[0].id, targetCard = model.exercises[1].id
+
+        #expect(model.syncExercises(with: [target], merged: [source.id: target.id]))
+
+        #expect(model.exercises.map(\.id) == [targetCard])
+        #expect(model.exerciseID(of: targetCard) == target.id)
+        #expect(model.exerciseID(of: sourceCard) == nil)
+    }
+
+    @Test func absorbedCardLinkIsClearedWhenTargetIsFirst() {
+        let (model, _) = makeModel()
+        let source = definition("卧推"), target = definition("杠铃卧推")
+        model.addExercise(target); model.addExercise(source)
+        let targetCard = model.exercises[0].id, sourceCard = model.exercises[1].id
+
+        #expect(model.syncExercises(with: [target], merged: [source.id: target.id]))
+
+        #expect(model.exercises.map(\.id) == [targetCard])
+        #expect(model.exerciseID(of: targetCard) == target.id)
+        #expect(model.exerciseID(of: sourceCard) == nil)
+    }
+
     @Test func mergedCardTakesTheEarlierPositionAndTargetIdentity() {
         let (model, _) = makeModel()
         let source = definition("卧推"), target = definition("杠铃卧推"), other = definition("深蹲")

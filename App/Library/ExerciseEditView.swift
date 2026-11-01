@@ -293,6 +293,10 @@ struct ExerciseEditView: View {
                 serviceDuplicate = trimmedName
             } catch ExerciseLibraryError.invalidName {
                 saveError = "请输入动作名称"
+            } catch is PhotoStorageError {
+                saveError = "照片没能保存，请重试；已填的内容都还在"
+            } catch is ExercisePhotoStore.PhotoError {
+                saveError = "这张照片无法处理，请换一张；已填的内容都还在"
             } catch {
                 saveError = "保存失败，请重试"
             }
