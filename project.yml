@@ -22,8 +22,9 @@ targets:
     sources: [App]
     settings:
       base:
-        # 目前没有 App 图标：xcodegen 对 application target 默认要求名为 AppIcon 的图标集，置空以免 actool 报错。
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # 主屏显示名（CFBundleName / Bundle ID 不变）。
+        INFOPLIST_KEY_CFBundleDisplayName: 训练记录
     dependencies:
       - package: TrainingRecordCore
         product: TrainingRecordCore
