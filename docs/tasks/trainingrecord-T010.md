@@ -1,6 +1,6 @@
 # trainingrecord-T010 历史明细去掉「最佳 1RM」
 
-状态: planned
+状态: approved
 分支: task/trainingrecord-T010（基于 main @ 1e5f4c9）
 执行者: code
 里程碑: 单卡，交付: PR（review 与 CI 通过后由 hermes 合并，属人类临时授权范围）
@@ -42,6 +42,7 @@
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 通过（0/0/0） | 旧版真 UI 红、新版绿；动作详情最佳 1RM 仍在；Core 215 + Persistence 42；PR CI run 41268034691 双绿（Xcode 26.6，257 tests） | 2026-11-01 |
 
 ## 升级说明
 
