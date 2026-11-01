@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrainingRecord · App 图标 v1</title>
+<style>
+/* Token 全部出自 ui/DESIGN.md §1 / §3 / §4，不新增颜色 */
+:root {
+  --font-text: system-ui, -apple-system, "SF Pro Text", "PingFang SC", sans-serif;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px;
+  --radius-lg: 16px;
+  --icon-mask: 22.37%;          /* 近似 iOS 图标连续圆角，仅预览用；真实裁切由系统完成 */
+  /* 深色 */
+  --d-bg: #000000; --d-surface: #1C1C1E; --d-surface-2: #2C2C2E; --d-label: #FFFFFF; --d-label-2: rgba(235,235,245,.60); --d-separator: rgba(84,84,88,.65);
+  /* 浅色 */
+  --l-bg: #F2F2F7; --l-surface: #FFFFFF; --l-label: #000000; --l-label-2: #636366;
+  --tint: #A6FF00; --metric-volume: #1EEAEF;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--d-bg); color: var(--d-label); font: 400 17px/22px var(--font-text); -webkit-font-smoothing: antialiased; }
+.doc { max-width: 1440px; margin: 0 auto; padding: var(--space-8) var(--space-4) 96px; }
+h1 { font: 700 34px/41px var(--font-text); }
+.lead { font: 400 15px/20px var(--font-text); color: var(--d-label-2); max-width: 72ch; margin-top: var(--space-2); }
+h2 { font: 700 28px/34px var(--font-text); margin-top: 48px; }
+h2 + p { font: 400 15px/20px var(--font-text); color: var(--d-label-2); max-width: 72ch; margin-top: var(--space-2); }
+
+.icon { position: relative; flex: none; border-radius: var(--icon-mask); overflow: hidden; background: var(--d-surface-2); }
+.variants .icon { box-shadow: 0 0 0 1px var(--d-separator); }   /* 仅大图：黑底图标放在黑色页面上时显出边界 */
+.icon img { display: block; width: 100%; height: 100%; }
+.icon.ref img { width: 124.3%; height: 124.3%; margin: -12.15%; }     /* macOS 图标自带约 10% 留白，裁掉以对齐 iOS 满版 */
+.icon.tinted { background-color: var(--metric-volume); isolation: isolate; }
+.icon.tinted img { mix-blend-mode: multiply; filter: grayscale(1); }  /* 灰度 × 着色色 ≈ iOS 着色模式 */
+.s60 { width: 60px; height: 60px; } .s40 { width: 40px; height: 40px; } .s29 { width: 29px; height: 29px; } .s180 { width: 180px; height: 180px; }
+
+.variants { display: flex; flex-wrap: wrap; gap: var(--space-6); margin-top: var(--space-6); }
+.variants figure { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+figcaption { font: 400 13px/18px var(--font-text); color: var(--d-label-2); text-align: center; }
+figcaption b { display: block; color: var(--d-label); font: 600 15px/20px var(--font-text); }
+
+.screens { display: grid; gap: var(--space-5); margin-top: var(--space-6); grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); }
+.screen { border-radius: var(--radius-lg); padding: var(--space-5); border: 1px solid var(--d-separator); }
+.screen.dark { background: var(--d-surface); }
+.screen.light { background: var(--l-bg); color: var(--l-label); }
+.screen.tint-mode { background: var(--d-bg); }
+.screen h3 { font: 600 15px/20px var(--font-text); }
+.screen .note { font: 400 13px/18px var(--font-text); color: var(--d-label-2); margin-top: 2px; }
+.screen.light .note { color: var(--l-label-2); }
+.row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); margin-top: var(--space-5); }
+.row .pt { width: 40px; flex: none; font: 500 12px/16px var(--font-text); color: var(--d-label-2); align-self: center; }
+.screen.light .row .pt { color: var(--l-label-2); }
+.app { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); width: 64px; }
+.app span { font: 400 11px/13px var(--font-text); max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.r40 .app, .row.r29 .app { width: auto; }
+
+.compare { display: flex; flex-wrap: wrap; gap: var(--space-8); margin-top: var(--space-6); }
+.compare > div { display: flex; flex-direction: column; gap: var(--space-3); }
+.compare .line { display: flex; align-items: center; gap: var(--space-3); }
+</style>
+</head>
+<body>
+<main class="doc">
+  <h1>TrainingRecord App 图标 v1</h1>
+  <p class="lead">两个方向，延续 DESIGN.md「方向 B 健身式」：只用现有 token，不放文字。每个方向三个变体：Any（浅色主屏）、Dark（深色主屏）、Tinted（iOS 着色模式，灰度）。下面按真实点数 60 / 40 / 29 pt 放在主屏上，旁边是几个系统 App 图标作对照。待人类批准。</p>
+
+  <section id="compare">
+    <h2>两个方向并排（29 pt，最难认的尺寸）</h2>
+    <p>29 pt 是「设置」列表里的尺寸。能在这里认出来，其他尺寸就没问题。</p>
+    <div class="compare" id="cmp"></div>
+  </section>
+
+  <section id="barbell">
+    <h2>方向 A · 杠铃</h2>
+    <p>「记录训练」最直接的物件。Any 用 tint 荧光绿满版、黑色杠铃（tint + on-tint，即 App 里「保存」按钮的配色）；Dark 反过来，黑底绿杠铃。剪影对称、粗重，小尺寸也能认出来。</p>
+    <div class="variants" data-dir="barbell"></div>
+    <div class="screens" data-dir="barbell"></div>
+  </section>
+
+  <section id="trend">
+    <h2>方向 B · 趋势</h2>
+    <p>来自趋势页：一条上升折线（容量色 metric-volume），终点是放大的最新一点（1RM 色 metric-strength）。把「指标色即身份」直接搬到主屏上。Any 用浅色 token 的白底和浅色指标色，Dark 用深色 token。</p>
+    <div class="variants" data-dir="trend"></div>
+    <div class="screens" data-dir="trend"></div>
+  </section>
+</main>
+<script>
+const REFS = [['Calendar', '日历'], ['Notes', '备忘录'], ['Reminders', '提醒事项']];
+const icon = (src, size, cls = '') => `<div class="icon s${size} ${cls}"><img src="${src}" alt="" onerror="this.remove()"></div>`;
+const ours = (dir, v) => `${dir}/AppIcon.appiconset/icon-${v}.png`;
+const ref = n => `_ref/${n}.png`;   // 本地从 macOS 系统 App 提取，不入库（见 .gitignore）
+
+function screen(dir, mode) {
+  const v = mode === 'light' ? 'any' : mode === 'dark' ? 'dark' : 'tinted';
+  const tcls = mode === 'tint-mode' ? 'tinted' : '';
+  const refCls = 'ref ' + tcls;
+  const title = { dark: '深色主屏 · Dark 变体', light: '浅色主屏 · Any 变体', 'tint-mode': '着色模式 · Tinted 变体' }[mode];
+  const note = { dark: '对照图标为系统 App 的默认外观', light: '', 'tint-mode': '系统按灰度亮度着色，这里模拟用户选了青色；对照图标为灰度近似' }[mode];
+  const apps = (size, label) => [[ours(dir, v), 'TrainingRecord', ''], ...REFS.map(([f, n]) => [ref(f), n, 'ref'])]
+    .map(([src, name, c]) => `<div class="app">${icon(src, size, (c === 'ref' ? refCls : tcls))}${label ? `<span>${name}</span>` : ''}</div>`).join('');
+  return `<div class="screen ${mode}"><h3>${title}</h3>${note ? `<p class="note">${note}</p>` : ''}
+    <div class="row r60"><span class="pt">60 pt</span>${apps(60, true)}</div>
+    <div class="row r40"><span class="pt">40 pt</span>${apps(40, false)}</div>
+    <div class="row r29"><span class="pt">29 pt</span>${apps(29, false)}</div></div>`;
+}
+document.querySelectorAll('.variants').forEach(el => {
+  const d = el.dataset.dir;
+  el.innerHTML = [['any', 'Any', '浅色主屏'], ['dark', 'Dark', '深色主屏'], ['tinted', 'Tinted', '原始灰度文件']]
+    .map(([v, t, n]) => `<figure>${icon(ours(d, v), 180)}<figcaption><b>${t}</b>${n}</figcaption></figure>`).join('');
+});
+document.querySelectorAll('.screens').forEach(el => {
+  el.innerHTML = ['dark', 'light', 'tint-mode'].map(m => screen(el.dataset.dir, m)).join('');
+});
+document.getElementById('cmp').innerHTML = [['barbell', 'A 杠铃'], ['trend', 'B 趋势']].map(([d, n]) =>
+  `<div><figcaption><b>${n}</b></figcaption><div class="line">${['any', 'dark'].map(v => icon(ours(d, v), 29)).join('')}${icon(ours(d, 'tinted'), 29, 'tinted')}
+   ${REFS.slice(0, 3).map(([f]) => icon(ref(f), 29, 'ref')).join('')}</div></div>`).join('');
+</script>
+</body>
+</html>

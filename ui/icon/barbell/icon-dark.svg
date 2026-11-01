@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>TrainingRecord 图标 · barbell · dark</title>
+  <!-- 方形满版、无圆角、无透明：圆角由系统裁切。颜色出处见 ui/DESIGN.md §11 -->
+  <rect width="1024" height="1024" fill="#000000"/>
+  <rect x="152" y="480" width="720" height="64" rx="32" fill="#A6FF00"/>
+  <rect x="264" y="292" width="96" height="440" rx="48" fill="#A6FF00"/>
+  <rect x="164" y="362" width="72" height="300" rx="36" fill="#A6FF00"/>
+  <rect x="664" y="292" width="96" height="440" rx="48" fill="#A6FF00"/>
+  <rect x="788" y="362" width="72" height="300" rx="36" fill="#A6FF00"/>
+</svg>
