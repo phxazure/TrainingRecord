@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>TrainingRecord 图标 · trend · tinted</title>
+  <!-- 方形满版、无圆角、无透明：圆角由系统裁切。颜色出处见 ui/DESIGN.md §11 -->
+  <rect width="1024" height="1024" fill="#000000"/>
+  <path d="M200,720 L400,580 L580,640 L770,370" fill="none" stroke="#999999" stroke-width="80" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="770" cy="370" r="96" fill="#FFFFFF" stroke="#000000" stroke-width="40" paint-order="stroke"/>
+</svg>

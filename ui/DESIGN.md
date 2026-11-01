@@ -242,3 +242,60 @@ Swift Charts：`LineMark` + `PointMark`，颜色 = 当前指标色，线宽 2.5�
 - 实现只改 `App/`（以及新增 Asset Catalog 颜色），Core 与验收标准不受影响（P1–P3 除外）。
 - 颜色、字号、间距、圆角一律引用本文件 token，不写魔法数。
 - 实现 PR 附模拟器截图与 `ui/screenshots/` 对应图并排，深色 + 浅色各一套。
+
+## 11. App 图标（v1，已批准：方向 B 趋势）
+
+预览：`ui/icon/index.html`（截图 `ui/icon/preview-1440.png`）。两个方向，人类选一个；未选中的方向在批准时删除。
+
+**决定（2026-11-01）**：人类选 **B 趋势**；A 杠铃的源文件已删除（预览页与 `preview-1440.png` 作为两方案对比的历史记录保留，A 的图会缺失）。主屏显示名改为「训练记录」（人类决定）。
+
+### 11.1 方向
+
+| 方向 | 图形 | 含义 | 用到的 token |
+|---|---|---|---|
+| A 杠铃 `ui/icon/barbell/` | 正侧面杠铃：一根横杆，两侧各一大一小两片杠铃片，左右对称 | 「记录训练」最直接的物件；配色就是 App 里「保存」按钮（`tint` 填充 + `on-tint`），图标和主操作是同一个颜色 | `tint`、`on-tint`、`bg`(深)、`label`(深) |
+| B 趋势 `ui/icon/trend/` | 一条先升、回落、再大幅上升的折线，终点是放大的圆点 | 来自趋势页；折线是容量色，最新一点是 1RM 色，把签名动作「指标色即身份」（§0.3）搬到主屏 | `metric-volume`、`metric-strength`（深 / 浅两套）、`surface`(浅)、`bg`(深)、`label`(深) |
+
+都不放文字，不加渐变、阴影、光泽：iOS 26 起系统会自己给图标加材质，我们只给平面图形。
+
+### 11.2 三个变体的规则
+
+| 变体 | 用在 | A 杠铃 | B 趋势 |
+|---|---|---|---|
+| Any | 浅色主屏（也是 iOS 17 唯一用到的那张） | 底 `tint` #A6FF00，图形 `on-tint` #000000 | 底 浅色 `surface` #FFFFFF，折线 浅色 `metric-volume` #006E80，终点 浅色 `metric-strength` #C8103F |
+| Dark | 深色主屏（iOS 18+） | 底 `bg` #000000，图形 深色 `tint` #A6FF00 | 底 `bg` #000000，折线 深色 `metric-volume` #1EEAEF，终点 深色 `metric-strength` #FF4F6E |
+| Tinted | 着色主屏（iOS 18+），系统按亮度重新上色 | 底 #000000，图形 深色 `label` #FFFFFF | 底 #000000，折线 #999999，终点 #FFFFFF |
+
+- Tinted 必须是灰度。B 的 #999999 是 `label` 白色按 60% 不透明度压在黑底上的灰度（与 `label-2` 的 60% 同一级），不是新颜色：系统只读亮度，60% 让折线着色后比终点浅一级，保留「线 + 最新一点」的主次。
+- 所有变体：1024×1024，满版方形，无圆角、无透明通道（sRGB，RGB 无 alpha），圆角由系统裁切。
+
+### 11.3 几何（1024 画布，坐标即 SVG 源文件）
+
+- A：横杆 720×64（全圆角），内侧杠铃片 96×440、外侧 72×300，片间距 28，内侧片中心距画布中心 ±200。整体宽 720（70%）、高 440（43%），四周离裁切圆角足够远。
+- B：折线 (200,720)→(400,580)→(580,640)→(770,370)，线宽 80，圆头圆角；终点圆 r=96，外圈加 40 宽的底色描边，把圆点和线断开，小尺寸下仍能分出「线」和「点」。
+- 最小验证尺寸 29 pt（设置列表）：A 的剪影与 B 的线 + 点都还能认出，见预览页顶部。
+
+### 11.4 交付格式
+
+每个方向一个 `AppIcon.appiconset/`（单尺寸 1024，Any / Dark / Tinted 三张），以及三份 SVG 源文件 `icon-any.svg`、`icon-dark.svg`、`icon-tinted.svg`。PNG 由 SVG 在 Chrome 中按 1:1 渲染，再去掉 alpha 通道。
+
+本地验证：两个 appiconset 都用 `xcrun actool --platform iphoneos --minimum-deployment-target 17.0 --app-icon AppIcon` 编译通过，没有警告；`Assets.car` 里有 Dark（`UIAppearanceDark`）和 Tinted（`ISAppearanceTintable`）两个外观。本机是 Xcode 27.2，CI 上的 Xcode 26.6 没有验证过；单尺寸 + luminosity 外观从 Xcode 16 起就支持，预期没问题。
+
+不做 Icon Composer `.icon`：部署目标是 iOS 17，`.icon` 只在 iOS 26 起生效，低版本仍需要上面的 appiconset；图形本身是单层平面图形，分层带来的 Liquid Glass 效果有限。等以后部署目标提高到 iOS 26，或者想让玻璃效果分层（比如 B 的终点单独一层），再做。
+
+### 11.5 交接给实现者（批准后）
+
+1. 把选中方向的 `AppIcon.appiconset/` 整个复制到 `App/Assets.xcassets/AppIcon.appiconset/`，文件不改。
+2. `project.yml` 里 `ASSETCATALOG_COMPILER_APPICON_NAME` 从 `""` 改为 `AppIcon`，同时删掉上面那行「目前没有 App 图标」的注释。
+3. 验收截图：模拟器主屏浅色、深色、着色模式各一张（`xcrun simctl ui booted appearance dark`；着色模式需在模拟器主屏长按 → 编辑 → 自定义里手动切换）。
+
+### 11.6 预览页里的系统图标
+
+对照用的日历、备忘录、提醒事项图标，是从本机 macOS 的 `/System/Applications/*.app` 提取的。它们是 Apple 的素材，所以放在 `ui/icon/_ref/`，并已加入 `.gitignore`，不进公开仓库。别的机器上打开预览页时，对照位显示为灰块。重新生成：
+
+```bash
+cd ui/icon && mkdir -p _ref && for a in Calendar Notes Reminders; do
+  sips -s format png -Z 1024 "$(ls /System/Applications/$a.app/Contents/Resources/*.icns | head -1)" --out _ref/$a.png; done
+```
+
+预览里的着色模式是近似效果：我们的 Tinted 图是按灰度乘上一种着色色模拟的；对照图标没有自己的 Tinted 版本，只做了灰度近似，所以它们在着色栏里看起来比真机亮。
