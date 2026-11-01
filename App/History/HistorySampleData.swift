@@ -7,43 +7,22 @@ import TrainingRecordCore
 ///
 /// - `-seedHistorySample`：往仓储预填若干场样例训练（卧推 5 场，可画 ≥4 点的趋势；推举只有 1 场）。
 ///   App 会改用内存仓储，样例不写进真实的本地存储。
-/// - `-historyTab history|trend`：启动后直接切到对应标签（兼容旧值 list）。
 /// - `-historyOpenFirst`：启动后切到「历史」并打开最近一场训练的明细。
-/// - `-trendExercise <名称>`：趋势标签选中指定动作。
-/// - `-trendMetric volume`：趋势标签启动时选「容量」。
 enum HistoryDebugLaunch {
     static let seedArgument = "-seedHistorySample"
-    static let tabArgument = "-historyTab"
     static let openFirstArgument = "-historyOpenFirst"
-    static let trendExerciseArgument = "-trendExercise"
-    static let trendMetricArgument = "-trendMetric"
 
     static var arguments: [String] { ProcessInfo.processInfo.arguments }
 
-    private static func value(after argument: String) -> String? {
-        guard let index = arguments.firstIndex(of: argument), index + 1 < arguments.count else { return nil }
-        return arguments[index + 1]
-    }
-
-    static var initialTab: ContentView.Tab? {
-        switch value(after: tabArgument) {
-        case "trend": return .trend
-        case "history", "list": return .history
-        default: return opensFirstSession ? .history : nil
-        }
-    }
-
     static var opensFirstSession: Bool { arguments.contains(openFirstArgument) }
-
-    static var trendExercise: String? { value(after: trendExerciseArgument) }
-
-    static var initialMetric: TrendMetric? {
-        value(after: trendMetricArgument) == "volume" ? .volume : nil
-    }
 
     /// 按启动参数预填样例训练；未请求时什么都不做。
     static func seedIfRequested(_ repository: any WorkoutRepository) async {
         guard arguments.contains(seedArgument) else { return }
+        await seedSessions(repository)
+    }
+
+    static func seedSessions(_ repository: any WorkoutRepository) async {
         for session in sampleSessions() {
             try? await repository.save(session)
         }

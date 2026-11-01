@@ -28,4 +28,8 @@ enum TrendAccessibilityID {
     static let currentValue = "trend.currentValue"
     static let emptyState = "trend.emptyState"
     static let singlePoint = "trend.singlePoint"
+    static let overallCard = "trend.overallCard"
+    static let overallChart = "trend.overallChart"
+    static let exerciseRow = "trend.exerciseRow"
+    static let exerciseList = "trend.exerciseList"
 }

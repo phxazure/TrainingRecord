@@ -5,7 +5,20 @@ import TrainingRecordPersistence
 @main
 struct TrainingRecordApp: App {
     /// 本地存储（失败时退回内存仓储）。整个 App 生命周期只打开一次。
-    private let storage = LaunchStorage.open()
+    private let storage: LaunchStorage
+    @State private var model: AppModel
+
+    init() {
+        let storage = LaunchStorage.open()
+        self.storage = storage
+        _model = State(
+            initialValue: AppModel(
+                repository: storage.repository,
+                libraryRepository: storage.library,
+                photos: storage.photos
+            )
+        )
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -15,15 +28,20 @@ struct TrainingRecordApp: App {
                 if let warning = storage.warning {
                     StorageWarningBanner(message: warning)
                 }
-                ContentView(repository: storage.repository)
+                ContentView()
             }
+            .environment(model)
+            // 启动：回填一次（数据迁移，幂等，失败只标记不崩溃），然后加载数据。
+            .task { await model.start() }
         }
     }
 }
 
 /// 启动时选定的仓储，以及（仅当退回内存仓储时）要给用户看的提示。
 struct LaunchStorage {
-    let repository: any WorkoutRepository
+    let repository: any ConditionalSessionUpdating
+    let library: any ExerciseLibraryRepository
+    let photos: ExercisePhotoStore
     let warning: String?
 
     static let openFailureMessage = "无法打开本地数据，本次记录不会保存"
@@ -38,38 +56,43 @@ struct LaunchStorage {
     static func open() -> LaunchStorage {
         #if DEBUG
         // 截图用的样例数据启动参数会注入样例（预填草稿的，点保存就会写进仓储）：
-        // 只能用内存仓储，绝不污染真实的本地存储。必须在创建持久容器之前决定。
-        if usesInMemoryStorage(arguments: ProcessInfo.processInfo.arguments) {
-            return LaunchStorage(repository: InMemoryWorkoutRepository(), warning: nil)
+        // 只能用内存仓储，绝不污染真实的本地存储（照片也放临时目录）。必须在创建持久容器之前决定。
+        if DebugLaunch.usesInMemoryStorage(arguments: ProcessInfo.processInfo.arguments) {
+            return LaunchStorage(
+                repository: InMemoryWorkoutRepository(),
+                library: InMemoryExerciseLibraryRepository(),
+                photos: .temporary(),
+                warning: nil
+            )
         }
         #endif
-        return open(at: defaultStoreURL, openOnDisk: SwiftDataWorkoutRepository.onDisk(url:))
+        return open(at: defaultStoreURL) { url in
+            // 训练记录与动作库共用同一个存储文件。
+            let store = try TrainingRecordStore.onDisk(url: url)
+            return (store.workouts, store.library)
+        }
     }
-
-    #if DEBUG
-    /// 会注入样例数据的 DEBUG 启动参数。新增任何会预填数据 / 草稿的参数，都要加到这里。
-    static let sampleDataArguments: Set<String> = [
-        HistoryDebugLaunch.seedArgument,  // -seedHistorySample：直接写仓储
-        RecordSampleData.launchArgument,  // -seedRecordSample：预填草稿，保存即写仓储
-        "-recordScrollToBottom",  // 预填两个动作的草稿（见 RecordScrollDebug）
-    ]
-
-    static func usesInMemoryStorage(arguments: [String]) -> Bool {
-        !sampleDataArguments.isDisjoint(with: arguments)
-    }
-    #endif
 
     /// 打开失败时不崩溃：退回内存仓储，并带上提示文案。
-    static func open(at url: URL, openOnDisk: (URL) throws -> any WorkoutRepository) -> LaunchStorage {
+    static func open(
+        at url: URL,
+        openOnDisk: (URL) throws -> (any ConditionalSessionUpdating, any ExerciseLibraryRepository)
+    ) -> LaunchStorage {
         do {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-simulateStoreOpenFailure") {
                 throw CocoaError(.fileWriteUnknown)
             }
             #endif
-            return LaunchStorage(repository: try openOnDisk(url), warning: nil)
+            let (repository, library) = try openOnDisk(url)
+            return LaunchStorage(repository: repository, library: library, photos: .standard, warning: nil)
         } catch {
-            return LaunchStorage(repository: InMemoryWorkoutRepository(), warning: openFailureMessage)
+            return LaunchStorage(
+                repository: InMemoryWorkoutRepository(),
+                library: InMemoryExerciseLibraryRepository(),
+                photos: .temporary(),
+                warning: openFailureMessage
+            )
         }
     }
 }

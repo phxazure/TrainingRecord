@@ -71,6 +71,13 @@ enum Metrics {
     static let toastSeconds: Double = 2
     /// 保存成功提示条弹出动画时长（§5）。
     static let toastSpringDuration: Double = 0.35
+    /// 动作照片：列表缩略图边长 = hit；详情页大图边长 = space-8 的 4 倍。
+    static let photoThumbnail: CGFloat = Space.hit
+    static let photoLarge: CGFloat = Space.s8 * 4
+    /// 整体趋势柱状图高度：space-8 的 4 倍。
+    static let overallChartHeight: CGFloat = Space.s8 * 4
+    /// 最近动作胶囊最多几个（DESIGN.md §9 P2）。
+    static let recentExerciseLimit = 6
 }
 
 // MARK: - 数字与单位（§2）

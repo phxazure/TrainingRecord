@@ -2,43 +2,29 @@ import SwiftUI
 import TrainingRecordCore
 
 /// 「历史」标签：本周汇总 + 按月分组的训练列表；点行进明细，左滑删除。
-/// 每次切到本标签都由 ContentView 触发重新加载，保证刚在「记录」保存的训练能看到。
+/// 每次切到本标签都由 ContentView 触发重新加载，保证刚在「训练」保存的训练能看到。
 struct HistoryView: View {
-    let model: HistoryViewModel
-    /// 空状态的「去记录」：切到记录标签。
-    let goToRecord: () -> Void
-    /// 明细里的「查看趋势」：切到趋势标签并选中该动作。
-    let openTrend: (String) -> Void
+    @Environment(AppModel.self) private var app
 
-    @State private var path = NavigationPath()
+    private var model: HistoryViewModel { app.history }
     @State private var hasLoaded = false
     @State private var lastAction: Action = .load
-    #if DEBUG
-    @State private var openedFirstForDebug = false
-    #endif
 
     private enum Action { case load, delete }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        @Bindable var app = app
+        NavigationStack(path: $app.historyPath) {
             content
                 .navigationTitle("历史")
                 .navigationDestination(for: UUID.self) { sessionID in
                     if let session = model.sessions.first(where: { $0.id == sessionID }) {
-                        HistoryDetailView(session: session, openTrend: openTrend)
+                        HistoryDetailView(session: session)
                     }
                 }
+                .exerciseDestinations()
         }
         .task { await reload() }
-        #if DEBUG
-        // 截图辅助：`-historyOpenFirst` 在第一批数据出现后打开最近一场的明细（只打开一次）。
-        .onChange(of: model.rows.first?.id) { _, firstID in
-            if HistoryDebugLaunch.opensFirstSession, !openedFirstForDebug, let firstID {
-                openedFirstForDebug = true
-                path.append(firstID)
-            }
-        }
-        #endif
     }
 
     @ViewBuilder
@@ -55,9 +41,9 @@ struct HistoryView: View {
             ContentUnavailableView {
                 Label("还没有训练记录", systemImage: "clock.arrow.circlepath")
             } description: {
-                Text("在「记录」里保存一次训练，就会出现在这里。")
+                Text("在「训练」里保存一次训练，就会出现在这里。")
             } actions: {
-                Button("去记录", action: goToRecord)
+                Button("去训练") { app.selectedTab = .record }
                     .buttonStyle(ProminentCapsuleButtonStyle())
                     .accessibilityIdentifier(HistoryAccessibilityID.goRecordButton)
             }

@@ -17,7 +17,7 @@ struct StoredRecordCounts: Equatable, Sendable {
 /// 用 SwiftData 实现的 `WorkoutRepository`：行为与 `InMemoryWorkoutRepository` 一致
 /// （规范见 `WorkoutRepository` 的文档注释）。actor 串行化全部读写。
 @ModelActor
-public actor SwiftDataWorkoutRepository: WorkoutRepository {
+public actor SwiftDataWorkoutRepository: ConditionalSessionUpdating {
     /// 内存模式：数据只在实例存活期间存在，每个实例互相独立。用于测试与「磁盘存储打不开」时的退路。
     public static func inMemory() throws -> SwiftDataWorkoutRepository {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
@@ -36,8 +36,7 @@ public actor SwiftDataWorkoutRepository: WorkoutRepository {
     }
 
     private static func makeContainer(_ configuration: ModelConfiguration) throws -> ModelContainer {
-        let schema = Schema([SessionRecord.self, ExerciseRecord.self, SetRecord.self])
-        return try ModelContainer(for: schema, configurations: [configuration])
+        try StoreSchema.makeContainer(configuration)
     }
 
     // MARK: WorkoutRepository
@@ -52,6 +51,25 @@ public actor SwiftDataWorkoutRepository: WorkoutRepository {
             try modelContext.save()
         } catch {
             // 保存失败时丢掉未提交的改动，避免它们混进下一次保存。
+            modelContext.rollback()
+            throw error
+        }
+    }
+
+    /// 原子更新（`ConditionalSessionUpdating`）：整个「读 → 变换 → 写」在 actor 上没有挂起点，
+    /// 不会被同一仓储上的删除打断；场次不存在时不创建。
+    public func updateExisting(id: UUID, _ transform: @Sendable (WorkoutSession) -> WorkoutSession?) async throws -> Bool {
+        do {
+            guard let record = try records(id: id).first else { return false }
+            // transform 返回的 id 必须等于 id：否则拒绝，不改动任何数据（见协议文档）。
+            guard let updated = transform(try Self.makeSession(from: record)), updated.id == id else { return false }
+            for existing in try records(id: id) {
+                modelContext.delete(existing)
+            }
+            modelContext.insert(Self.makeRecord(from: updated))
+            try modelContext.save()
+            return true
+        } catch {
             modelContext.rollback()
             throw error
         }
@@ -102,7 +120,7 @@ public actor SwiftDataWorkoutRepository: WorkoutRepository {
     private static func makeRecord(from session: WorkoutSession) -> SessionRecord {
         let record = SessionRecord(id: session.id, date: session.date)
         for (exerciseIndex, exercise) in session.exercises.enumerated() {
-            let exerciseRecord = ExerciseRecord(order: exerciseIndex, name: exercise.name)
+            let exerciseRecord = ExerciseRecord(order: exerciseIndex, name: exercise.name, exerciseID: exercise.exerciseID)
             for (setIndex, set) in exercise.sets.enumerated() {
                 exerciseRecord.sets.append(SetRecord(order: setIndex, weight: set.weight, reps: set.reps))
             }
@@ -123,7 +141,7 @@ public actor SwiftDataWorkoutRepository: WorkoutRepository {
                         }
                         return set
                     }
-                guard let exercise = ExerciseEntry(name: exerciseRecord.name, sets: sets) else {
+                guard let exercise = ExerciseEntry(name: exerciseRecord.name, sets: sets, exerciseID: exerciseRecord.exerciseID) else {
                     throw SwiftDataWorkoutRepositoryError.corruptRecord
                 }
                 return exercise

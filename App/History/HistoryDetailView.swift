@@ -5,7 +5,6 @@ import TrainingRecordCore
 /// 每个动作一张卡片：最佳估算 1RM（metric-strength）、每组右侧是该组估算 1RM、容量与「查看趋势」。
 struct HistoryDetailView: View {
     let session: WorkoutSession
-    let openTrend: (String) -> Void
 
     var body: some View {
         List {
@@ -13,7 +12,7 @@ struct HistoryDetailView: View {
 
             // ExerciseEntry 不是 Identifiable，按下标取（明细只读，顺序稳定）。
             ForEach(session.exercises.indices, id: \.self) { index in
-                ExerciseDetailCard(session: session, exercise: session.exercises[index], openTrend: openTrend)
+                ExerciseDetailCard(session: session, exercise: session.exercises[index])
             }
         }
         .listStyle(.insetGrouped)
@@ -74,7 +73,7 @@ private struct SummaryRow: View {
 private struct ExerciseDetailCard: View {
     let session: WorkoutSession
     let exercise: ExerciseEntry
-    let openTrend: (String) -> Void
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         // 该场次该动作的最佳估算 1RM 直接取 Core 的趋势算法；模块名限定避免被同名成员遮蔽。
@@ -114,32 +113,27 @@ private struct ExerciseDetailCard: View {
                 .accessibilityElement(children: .combine)
             }
 
-            HStack {
-                HStack(spacing: Space.s1) {
-                    Text("容量")
-                        .font(.subheadline)
-                    ValueWithUnit(
-                        value: Format.volume(volume(of: exercise)),
-                        unit: "kg",
-                        style: .subheadline,
-                        weight: .regular,
-                        valueColor: .metricVolume
-                    )
+            HStack(spacing: Space.s1) {
+                Text("容量")
+                    .font(.subheadline)
+                ValueWithUnit(
+                    value: Format.volume(volume(of: exercise)),
+                    unit: "kg",
+                    style: .subheadline,
+                    weight: .regular,
+                    valueColor: .metricVolume
+                )
+                Spacer(minLength: 0)
+            }
+
+            // 点进去看这个动作的详情（和动作库、趋势里是同一个视图）。
+            if let id = exercise.exerciseID, app.library.definition(id: id) != nil {
+                NavigationLink(value: ExerciseRoute(id: id)) {
+                    Text("查看动作详情")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(minHeight: Space.hit, alignment: .leading)
                 }
-                Spacer(minLength: Space.s2)
-                Button {
-                    openTrend(exercise.name)
-                } label: {
-                    HStack(spacing: Space.s1) {
-                        Text("查看趋势")
-                        Image(systemName: "chevron.right").imageScale(.small)
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .frame(minHeight: Space.hit)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Color.accentColor)
                 .accessibilityIdentifier(HistoryAccessibilityID.viewTrendButton)
             }
         }

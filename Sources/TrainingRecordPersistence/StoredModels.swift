@@ -23,13 +23,16 @@ final class ExerciseRecord {
     /// 在所属场次中的位置（从 0 起）。
     var order: Int
     var name: String
+    /// 指向动作库条目；旧版存储里没有这一列，打开时按 nil 迁移（可选属性，轻量迁移）。
+    var exerciseID: UUID?
     var session: SessionRecord?
     @Relationship(deleteRule: .cascade, inverse: \SetRecord.exercise)
     var sets: [SetRecord] = []
 
-    init(order: Int, name: String) {
+    init(order: Int, name: String, exerciseID: UUID? = nil) {
         self.order = order
         self.name = name
+        self.exerciseID = exerciseID
     }
 }
 
@@ -45,5 +48,21 @@ final class SetRecord {
         self.order = order
         self.weight = weight
         self.reps = reps
+    }
+}
+
+/// 动作库条目。与训练记录放在同一个存储里。
+@Model
+final class ExerciseDefinitionRecord {
+    var id: UUID
+    var name: String
+    var bodyPart: String
+    var photoFileName: String?
+
+    init(id: UUID, name: String, bodyPart: String, photoFileName: String?) {
+        self.id = id
+        self.name = name
+        self.bodyPart = bodyPart
+        self.photoFileName = photoFileName
     }
 }

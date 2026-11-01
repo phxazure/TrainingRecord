@@ -21,13 +21,17 @@ public struct ExerciseEntry: Equatable, Sendable {
     public let name: String
     /// 该动作的所有组。
     public let sets: [SetEntry]
+    /// 指向动作库条目（`ExerciseDefinition.id`）；旧数据、自由输入的动作为 nil。
+    /// `name` 仍然保存：它是显示名，也让按名字工作的逻辑（趋势、历史行）不依赖动作库。
+    public let exerciseID: UUID?
 
     /// name 去掉首尾空白后为空时返回 nil。
-    public init?(name: String, sets: [SetEntry]) {
+    public init?(name: String, sets: [SetEntry], exerciseID: UUID? = nil) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         self.name = trimmed
         self.sets = sets
+        self.exerciseID = exerciseID
     }
 }
 
