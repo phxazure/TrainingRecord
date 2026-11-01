@@ -1,6 +1,6 @@
 # trainingrecord-T008 动作库：数据层 + 改名同步 + 上次成绩/最近动作/复制上次训练
 
-状态: planned
+状态: approved
 分支: task/trainingrecord-T008（基于 task/trainingrecord-T007 @ 83c1bbc（含 main 合入），堆叠开发）
 执行者: code
 里程碑: m3-library（T008 数据层 → T009 界面，两单都通过后由 hermes 开一个 PR 到 main）
@@ -148,6 +148,8 @@ R1 追加：原子重写（hermes 2026-11-01，依据 review R1 BLOCKER「删除
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
 | 1 | 打回（1 BLOCKER / 1 SHOULD-FIX） | BLOCKER：后台回填与历史删除交错，被删训练被重写复活（ExerciseLibraryService.swift:262–265）；SHOULD-FIX：空模板语义（hermes 裁定见 e0dfca5） | 2026-11-01 |
+| 2 | 通过（0 BLOCKER / 1 SHOULD-FIX） | R1 两项关闭（删除竞态三条交错测试旧红新绿；空模板）；SHOULD-FIX：updateExisting 未校验 transform 返回的 id | 2026-11-01 |
+| 3 | 通过（0 / 0 / 0） | R2 SHOULD-FIX 关闭（b3f4fdf，不同 id 返回 false、不创建）；Core 141 + Persistence 42 | 2026-11-01 |
 
 ## 升级说明
 
