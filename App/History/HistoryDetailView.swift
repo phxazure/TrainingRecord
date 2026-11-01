@@ -2,7 +2,8 @@ import SwiftUI
 import TrainingRecordCore
 
 /// 训练明细（§7）：顶部三项汇总（容量 / 组数 / 动作，宽度 1.6 : 1 : 1）；
-/// 每个动作一张卡片：最佳估算 1RM（metric-strength）、每组右侧是该组估算 1RM、容量与「查看趋势」。
+/// 每个动作一张卡片：每组「重量 × 次数」、容量与「查看动作详情」。
+/// 历史里不显示最佳 1RM（人类的要求）；最佳 1RM 在「趋势」和「动作详情」里看。
 struct HistoryDetailView: View {
     let session: WorkoutSession
 
@@ -12,7 +13,7 @@ struct HistoryDetailView: View {
 
             // ExerciseEntry 不是 Identifiable，按下标取（明细只读，顺序稳定）。
             ForEach(session.exercises.indices, id: \.self) { index in
-                ExerciseDetailCard(session: session, exercise: session.exercises[index])
+                ExerciseDetailCard(exercise: session.exercises[index])
             }
         }
         .listStyle(.insetGrouped)
@@ -71,44 +72,19 @@ private struct SummaryRow: View {
 
 /// 一个动作的明细卡片。
 private struct ExerciseDetailCard: View {
-    let session: WorkoutSession
     let exercise: ExerciseEntry
     @Environment(AppModel.self) private var app
 
     var body: some View {
-        // 该场次该动作的最佳估算 1RM 直接取 Core 的趋势算法；模块名限定避免被同名成员遮蔽。
-        let best = TrainingRecordCore.trend(for: exercise.name, in: [session]).first?.bestE1RM
         Section {
-            HStack(alignment: .firstTextBaseline) {
-                Text(exercise.name)
-                    .font(.title3.weight(.semibold))
-                Spacer(minLength: Space.s2)
-                if let best {
-                    VStack(alignment: .trailing, spacing: 0) {
-                        Text("最佳 1RM")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.label2)
-                        ValueWithUnit(
-                            value: Format.oneRM(best),
-                            unit: "kg",
-                            weight: .semibold,
-                            valueColor: .metricStrength
-                        )
-                    }
-                }
-            }
+            Text(exercise.name)
+                .font(.title3.weight(.semibold))
 
             ForEach(exercise.sets.indices, id: \.self) { index in
                 let set = exercise.sets[index]
                 HStack(spacing: Space.s3) {
                     NumberBadge(number: index + 1)
                     SetValue(weight: set.weight, reps: set.reps)
-                    Spacer(minLength: Space.s2)
-                    if let oneRM = estimatedOneRM(of: set) {
-                        Text(Format.oneRM(oneRM))
-                            .numeric(.subheadline)
-                            .foregroundStyle(oneRM == best ? Color.metricStrength : Color.label2)
-                    }
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -137,13 +113,6 @@ private struct ExerciseDetailCard: View {
                 .accessibilityIdentifier(HistoryAccessibilityID.viewTrendButton)
             }
         }
-    }
-
-    /// 单组估算 1RM（Epley，四舍五入到 0.1），与 Core 趋势算法一致；0 次的组不参与。
-    private func estimatedOneRM(of set: SetEntry) -> Double? {
-        guard set.reps >= 1 else { return nil }
-        let raw = set.reps == 1 ? set.weight : set.weight * (1 + Double(set.reps) / 30)
-        return (raw * 10).rounded() / 10
     }
 }
 
