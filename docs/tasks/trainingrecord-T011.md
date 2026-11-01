@@ -1,6 +1,6 @@
 # trainingrecord-T011 装入 App 图标（方向 B）+ 显示名「训练记录」
 
-状态: in_dev
+状态: approved
 分支: task/trainingrecord-T011（基于 ui/app-icon-v1 的 ba4c173，含 frontend 交付与人类批准）
 执行者: code
 交付: PR（单独开 PR，review 通过后 hermes 开）
@@ -30,3 +30,4 @@
 
 | 轮次 | 结论 | 关键 findings | 时间 |
 |---|---|---|---|
+| 1 | 通过（0/0/0） | 图标逐字节一致；Debug/Release 产物显示名「训练记录」、名称与 Bundle ID 不变；Assets.car 含 Any/Dark/Tinted；回退基线时验收探针变红；257 测试。hermes 裁定接受：深色主屏截图仍为浅色图标（主屏图标风格是独立设置，截图属尽力项）；Xcode 26.6 以 CI 为准 | 2026-11-01 |
